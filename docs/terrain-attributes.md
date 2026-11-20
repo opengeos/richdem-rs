@@ -6,7 +6,7 @@
 
 | Attribute Name | Rust Enum (`TerrainAttr`) | Algorithm / Units |
 |---|---|---|
-| `slope_riserun` | `SlopeRiserun` | Horn (1981) rise / run (dimensionless) |
+| `slope_riserun` | `SlopeRiseRun` | Horn (1981) rise / run (dimensionless) |
 | `slope_percentage` | `SlopePercentage` | Horn (1981) percent slope (`100 × rise / run`) |
 | `slope_degrees` | `SlopeDegrees` | Horn (1981) slope in degrees (`0°–90°`) |
 | `slope_radians` | `SlopeRadians` | Horn (1981) slope in radians (`0–π/2`) |
@@ -36,7 +36,7 @@ richdem terrain-property dem.tif curv.tif --attrib curvature --compress
 
 ## Hydrologic Indices & Surface Metrics
 
-- **Stream Power Index (`ta_spi`)**: $\text{SPI} = \ln(A \cdot S)$ from flow accumulation $A$ and rise/run slope $S$.
-- **Compound Topographic Index / Topographic Wetness Index (`ta_cti`)**: $\text{CTI} = \ln(A / \tan \beta)$.
+- **Stream Power Index (`ta_spi`)**: `ln((A / cell_area) * (S + 0.001))` from flow accumulation `A` and rise/run slope `S`.
+- **Compound Topographic Index / Topographic Wetness Index (`ta_cti`)**: `ln((A / cell_area) / (S + 0.001))` from flow accumulation `A` and rise/run slope `S`.
 - **Topographic Surface Area (`dem_surface_area` / `richdem surface-area`)**: Jenness (2004) 8-triangle surface area around every valid cell, using deterministic per-row partial sums so parallel and serial builds produce identical results.
 - **Perimeter (`perimeter`)**: `PerimType::CellCount` (border cells) or `PerimType::SquareEdge` (sum of exposed horizontal and vertical edge lengths).

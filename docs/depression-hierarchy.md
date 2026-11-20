@@ -3,7 +3,7 @@
 `richdem-rs` includes the full implementation of:
 
 - **Depression Hierarchies** (Barnes, Callaghan, & Wickert, 2020) — builds a binary tree capturing every nested topographic depression, its pit cell, sill (outlet) cell, marginal/total volume, and ocean connectivity.
-- **Fill-Spill-Merge** (Barnes, Callaghan, & Wickert, 2021) — routes surface water through the depression hierarchy in $O(N \log N)$ time while strictly conserving mass, filling depressions to their sill levels, spilling excess water downstream, and merging flooded sub-basins.
+- **Fill-Spill-Merge** (Barnes, Callaghan, & Wickert, 2021) — routes surface water through the depression hierarchy in `O(N log N)` time while strictly conserving mass, filling depressions to their sill levels, spilling excess water downstream, and merging flooded sub-basins.
 
 ## Python Example
 

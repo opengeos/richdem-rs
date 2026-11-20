@@ -15,7 +15,7 @@ Full API rustdocs are published automatically on [docs.rs/richdem](https://docs.
 - **`Array3D<f32>`**: 3D `(width, height, 9)` flow proportion array (`FLOW_PROPS_DEPTH = 9`).
 - **`Topology`**: `Topology::D8` or `Topology::D4`.
 - **`FlowAccumMethod`**: `D8`, `D4`, `Tarboton` (`Dinf`), `Quinn`, `Holmgren`, `Freeman`, `Rho8`, `Rho4`.
-- **`TerrainAttr`**: `SlopeRiserun`, `SlopePercentage`, `SlopeDegrees`, `SlopeRadians`, `Aspect`, `Curvature`, `PlanformCurvature`, `ProfileCurvature`.
+- **`TerrainAttr`**: `SlopeRiseRun`, `SlopePercentage`, `SlopeDegrees`, `SlopeRadians`, `Aspect`, `Curvature`, `PlanformCurvature`, `ProfileCurvature`.
 - **`DepressionHierarchy<T>` / `Depression<T>`**: Binary hierarchy of nested topographic depressions.
 - **`Error` / `Result<T>`**: Structured error type via `thiserror`.
 

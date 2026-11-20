@@ -1,6 +1,6 @@
 # Benchmarks
 
-Benchmarks were measured on synthetic Perlin-noise `float64` DEMs (`seed = 42`, warmup + median of 3 runs) on an **Intel Xeon w7-3445** running Linux (`x86_64`), compiled with **`rustc 1.100.0`** (`--release`), comparing **`richdem-rs 0.1.0`** against **`richdem2 2.4.3`** (C++ / pybind11).
+Benchmarks were measured on synthetic Perlin-noise `float64` DEMs (`seed = 42`, warmup + median of 3 runs, single-threaded execution for the head-to-head comparison) on an **Intel Xeon w7-3445** running Linux (`x86_64`), compiled with **`rustc 1.100.0`** (`--release`), comparing **`richdem-rs 0.1.0`** (`v0.1.0`) against **`richdem2 2.4.3`** (C++ / pybind11).
 
 ## Python Head-to-Head (`richdem-rs` vs C++ `richdem2`)
 

@@ -60,10 +60,10 @@
 
 ## Highlights
 
-- **Full algorithmic parity with RichDEM:**
-  - **Depression filling:** Priority-Flood (Barnes et al. 2014 Original & Improved, Zhou et al. 2016, Wei et al. 2018), Priority-Flood+Epsilon, max-area filling, pit masks, watershed labeling, and `HasDepressions`. See [Depressions & Breaching](depressions.md).
+- **Broad single-node algorithmic parity with RichDEM:**
+  - **Depression filling:** Priority-Flood (Barnes et al. 2014 Original & Improved, Zhou et al. 2016, Wei et al. 2018), Priority-Flood+Epsilon, max-area filling, pit masks, watershed labeling, and `has_depressions` (Rust / CLI). See [Depressions & Breaching](depressions.md).
   - **Depression breaching:** Lindsay (2016) Complete, Selective, and Constrained breaching with optional epsilon gradients and hybrid filling.
-  - **Depression Hierarchies & Fill-Spill-Merge:** Full `GetDepressionHierarchy` (Barnes et al. 2020) and `FillSpillMerge` (Barnes et al. 2021) water-routing engine. See [Depression Hierarchies & FSM](depression-hierarchy.md).
+  - **Depression Hierarchies & Fill-Spill-Merge:** Full `get_depression_hierarchy` (Barnes et al. 2020) and `fill_spill_merge` (Barnes et al. 2021) water-routing engine. See [Depression Hierarchies & FSM](depression-hierarchy.md).
   - **Flat resolution:** Barnes et al. (2014) flat mask, epsilon DEM alteration, D8 & D-infinity flat flow resolution, and Garbrecht & Martz (1997). See [Flats & Flow Routing](flow-routing.md).
   - **Flow metrics & accumulation:** D8 / D4 (O'Callaghan & Mark 1984), Rho8 / Rho4 (Fairfield & Leymarie 1991), D-infinity (Tarboton 1997), Quinn (1991), Holmgren (1994), Freeman (1991), generic 3D flow-proportion accumulation, direct D8 & D-infinity accumulation, and ArcGIS / TauDEM D8 conversions.
   - **Terrain attributes:** Slope (rise/run, percentage, degrees, radians) and aspect (Horn 1981), total / planform / profile curvature (Zevenbergen & Thorne 1987), SPI, CTI, topographic surface area (Jenness 2004), and perimeter. See [Terrain Attributes](terrain-attributes.md).
