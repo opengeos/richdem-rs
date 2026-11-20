@@ -1,6 +1,9 @@
 # richdem-rs
 
 [![CI](https://github.com/opengeos/richdem-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/opengeos/richdem-rs/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/richdem.svg)](https://crates.io/crates/richdem)
+[![PyPI](https://img.shields.io/pypi/v/richdem-rs.svg)](https://pypi.org/project/richdem-rs/)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/opengeos/richdem-rs/blob/main/examples/richdem_rs_demo.ipynb)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 High-performance Digital Elevation Model (DEM) hydrologic and terrain analysis in **pure Rust**, with GDAL-free geospatial raster I/O powered by [`terrio`](https://github.com/opengeos/terrio).
@@ -38,7 +41,7 @@ Add `richdem` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-richdem = { git = "https://github.com/opengeos/richdem-rs" }
+richdem = "0.1"
 ```
 
 ```rust,no_run
@@ -70,10 +73,10 @@ fn main() -> richdem::Result<()> {
 
 ## Command-Line Interface
 
-Build and run the standalone `richdem` CLI:
+Install and run the standalone `richdem` CLI:
 
 ```sh
-cargo install --path crates/richdem-cli
+cargo install richdem-cli
 
 richdem depressions-flood dem.tif filled.tif --gradient --compress
 richdem depressions-breach dem.tif breached.tif --mode complete
@@ -93,7 +96,13 @@ richdem compare dem.tif filled.tif
 
 ## Python Usage
 
-Build locally with [maturin](https://www.maturin.rs/):
+Install from PyPI (no GDAL installation required):
+
+```sh
+pip install richdem-rs
+```
+
+Or try it interactively in [Google Colab](https://colab.research.google.com/github/opengeos/richdem-rs/blob/main/examples/richdem_rs_demo.ipynb). To build from source with [maturin](https://www.maturin.rs/):
 
 ```sh
 cd python
