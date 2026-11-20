@@ -21,7 +21,7 @@ richdem = { version = "0.1", default-features = false, features = ["terrio"] }
 
 ## Determinism
 
-All parallelized kernels operate on independent output rows or collect per-row partial results in deterministic row order, ensuring identical results across thread counts and between `parallel` and single-threaded builds.
+All parallelized kernels operate on independent output rows or collect per-row partial results in deterministic row order so outputs are independent of thread scheduling order across thread counts and between `parallel` and single-threaded builds.
 
 ## What Runs in Parallel vs. Sequentially
 
@@ -35,7 +35,11 @@ All parallelized kernels operate on independent output rows or collect per-row p
 
 ## Multi-Core Scaling (Intel Xeon w7-3445, 40 Logical Cores)
 
-Measured on synthetic Perlin-noise `f64` DEMs (median of 3 release runs, `1T` to `40T`):
+Measured on synthetic Perlin-noise `f64` DEMs (median of 3 release runs, `1T` to `40T`) using `crates/richdem/examples/benchmark_parallel.rs`:
+
+```sh
+cargo run --release -p richdem --example benchmark_parallel
+```
 
 ### 2000 × 2000 (4,000,000 cells)
 
