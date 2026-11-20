@@ -1,0 +1,126 @@
+name: Release build
+
+# Builds all release artifacts: Python wheels (abi3-py311) for Linux, macOS, and Windows,
+# the Python source distribution, and stripped `richdem` CLI archives with SHA-256 checksums.
+# Called by release.yml (on version tags) and release-dry-run.yml (manual pre-release check).
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  wheels:
+    name: wheels (${{ matrix.platform.os }}, ${{ matrix.platform.target }})
+    runs-on: ${{ matrix.platform.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - { os: ubuntu-latest, target: x86_64, manylinux: auto }
+          - { os: ubuntu-latest, target: aarch64, manylinux: "2_28" }
+          - { os: ubuntu-latest, target: x86_64, manylinux: musllinux_1_2 }
+          - { os: ubuntu-latest, target: aarch64, manylinux: musllinux_1_2 }
+          - { os: macos-latest, target: x86_64, manylinux: auto }
+          - { os: macos-latest, target: aarch64, manylinux: auto }
+          - { os: windows-latest, target: x64, manylinux: auto }
+          - { os: windows-11-arm, target: aarch64, manylinux: auto }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Verify python/LICENSE and python/NOTICE match root
+        shell: bash
+        run: |
+          diff -u LICENSE python/LICENSE
+          diff -u NOTICE python/NOTICE
+      - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          working-directory: python
+          target: ${{ matrix.platform.target }}
+          manylinux: ${{ matrix.platform.manylinux }}
+          args: --release --out dist
+      - name: Check that the wheel carries the license files
+        shell: bash
+        run: python .github/scripts/check-license-files.py python/dist/*.whl
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wheels-${{ matrix.platform.os }}-${{ matrix.platform.target }}-${{ matrix.platform.manylinux }}
+          path: python/dist
+
+  sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Verify python/LICENSE and python/NOTICE match root
+        run: |
+          diff -u LICENSE python/LICENSE
+          diff -u NOTICE python/NOTICE
+      - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          working-directory: python
+          command: sdist
+          args: --out dist
+      - name: Check that the sdist carries the license files
+        run: python3 .github/scripts/check-license-files.py python/dist/*.tar.gz
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sdist
+          path: python/dist
+
+  cli:
+    name: cli (${{ matrix.platform.target }})
+    runs-on: ${{ matrix.platform.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-musl }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl }
+          - { os: macos-latest, target: x86_64-apple-darwin }
+          - { os: macos-latest, target: aarch64-apple-darwin }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc }
+          - { os: windows-11-arm, target: aarch64-pc-windows-msvc }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master; toolchain set by input
+        with:
+          toolchain: stable
+          targets: ${{ matrix.platform.target }}
+      - name: Install musl C toolchain
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Build CLI binary
+        env:
+          CARGO_PROFILE_RELEASE_STRIP: symbols
+        run: cargo build --release -p richdem-cli --target ${{ matrix.platform.target }}
+      - name: Check that the binary runs
+        shell: bash
+        run: |
+          bin="target/${{ matrix.platform.target }}/release/richdem"
+          if [ "$RUNNER_OS" = Windows ]; then bin="$bin.exe"; fi
+          "$bin" --version
+          "$bin" --help > /dev/null
+      - name: Package archive and checksum
+        shell: bash
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "richdem-cli") | .version')
+          name="richdem-cli-v$version-${{ matrix.platform.target }}"
+          mkdir -p "dist/$name"
+          cp LICENSE NOTICE README.md "dist/$name/"
+          cd dist
+          if [ "$RUNNER_OS" = Windows ]; then
+            cp "../target/${{ matrix.platform.target }}/release/richdem.exe" "$name/"
+            7z a -tzip -bd "$name.zip" "$name" > /dev/null
+            sha256sum "$name.zip" > "$name.zip.sha256"
+          else
+            cp "../target/${{ matrix.platform.target }}/release/richdem" "$name/"
+            tar -czf "$name.tar.gz" "$name"
+            shasum -a 256 "$name.tar.gz" > "$name.tar.gz.sha256"
+          fi
+          rm -r "$name"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cli-${{ matrix.platform.target }}
+          path: dist/*
