@@ -99,6 +99,7 @@ jobs:
         shell: bash
         run: |
           bin="target/${{ matrix.platform.target }}/release/richdem"
+          if [ "$RUNNER_OS" = Windows ]; then bin="$bin.exe"; fi
           "$bin" --version
           "$bin" --help > /dev/null
       - name: Package archive and checksum

@@ -12,6 +12,7 @@ from __future__ import annotations
 import sys
 import tarfile
 import zipfile
+from pathlib import Path
 
 NAMES = ("LICENSE", "NOTICE")
 
@@ -21,15 +22,24 @@ def members(path: str) -> list[str]:
     if path.endswith(".whl"):
         with zipfile.ZipFile(path) as wheel:
             return wheel.namelist()
-    with tarfile.open(path) as sdist:
-        return sdist.getnames()
+    if path.endswith(".tar.gz"):
+        with tarfile.open(path) as sdist:
+            return sdist.getnames()
+    raise ValueError(f"unsupported archive format: {path}")
 
 
 def main() -> None:
     """Verify every archive on the command line carries all required license files."""
     missing: list[str] = []
     for path in sys.argv[1:]:
-        names = members(path)
+        if not Path(path).is_file():
+            missing.append(f"{path}: archive not found")
+            continue
+        try:
+            names = members(path)
+        except (ValueError, zipfile.BadZipFile, tarfile.TarError) as exc:
+            missing.append(f"{path}: {exc}")
+            continue
         for name in NAMES:
             if path.endswith(".whl"):
                 found = any(n.endswith(f".dist-info/licenses/{name}") for n in names)
