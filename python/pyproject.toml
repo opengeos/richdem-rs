@@ -1,0 +1,51 @@
+[build-system]
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
+
+[project]
+name = "richdem-rs"
+dynamic = ["version"]
+description = "High-performance DEM hydrologic and terrain analysis in pure Rust (port of Richard Barnes's RichDEM)"
+readme = "README.md"
+license = "GPL-3.0-only"
+requires-python = ">=3.10"
+authors = [
+    { name = "Richard Barnes", email = "rbarnes@umn.edu" },
+    { name = "Qiusheng Wu", email = "giswqs@gmail.com" },
+]
+keywords = ["GIS", "terrain", "hydrology", "geomorphology", "raster", "dem", "rust"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: GIS",
+]
+dependencies = ["numpy>=1.24"]
+
+[project.optional-dependencies]
+plot = ["matplotlib>=3.5"]
+test = ["pytest>=7"]
+
+[project.scripts]
+rd_depression_filling = "richdem_rs.cli:DepressionFilling"
+rd_breach_depressions = "richdem_rs.cli:BreachDepressions"
+rd_flow_accumulation = "richdem_rs.cli:FlowAccumulation"
+rd_terrain_attribute = "richdem_rs.cli:TerrainAttribute"
+rd_info = "richdem_rs.cli:RdInfo"
+rd_compare = "richdem_rs.cli:RdCompare"
+
+[project.urls]
+Homepage = "https://github.com/opengeos/richdem-rs"
+Repository = "https://github.com/opengeos/richdem-rs"
+Issues = "https://github.com/opengeos/richdem-rs/issues"
+
+[tool.maturin]
+module-name = "richdem_rs._richdem_rs"
+python-source = "python"
+manifest-path = "Cargo.toml"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
