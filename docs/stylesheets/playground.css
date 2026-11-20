@@ -1,0 +1,208 @@
+/* Interactive richdem-rs WebAssembly playground */
+#richdem-playground .rp-status {
+  font-weight: 600;
+  margin-bottom: 0.8rem;
+}
+
+#richdem-playground .rp-error {
+  color: var(--md-code-hl-special-color, #e53935);
+}
+
+#richdem-playground .rp-drop {
+  border: 2px dashed var(--md-default-fg-color--lighter);
+  border-radius: 0.45rem;
+  padding: 1rem 1.25rem;
+  margin: 0.75rem 0 1rem;
+}
+
+#richdem-playground .rp-drop.rp-over {
+  border-color: var(--md-accent-fg-color);
+  background: var(--md-accent-fg-color--transparent);
+}
+
+#richdem-playground .rp-link {
+  color: var(--md-typeset-a-color);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+#richdem-playground .rp-hint {
+  color: var(--md-default-fg-color--light);
+  font-size: 0.72rem;
+}
+
+#richdem-playground .rp-samples button {
+  margin: 0.25rem 0.4rem 0.25rem 0;
+  padding: 0.3rem 0.75rem;
+  border: 1px solid var(--md-default-fg-color--lighter);
+  border-radius: 0.25rem;
+  background: var(--md-default-bg-color);
+  color: var(--md-default-fg-color);
+  cursor: pointer;
+  font-size: 0.74rem;
+}
+
+#richdem-playground .rp-samples button:hover {
+  border-color: var(--md-accent-fg-color);
+}
+
+#richdem-playground .rp-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.75rem;
+  align-items: end;
+  margin: 1rem 0 1.25rem;
+}
+
+#richdem-playground .rp-field label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  margin-bottom: 0.2rem;
+}
+
+#richdem-playground .rp-field input,
+#richdem-playground .rp-field select {
+  width: 100%;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid var(--md-default-fg-color--lighter);
+  border-radius: 0.25rem;
+  background: var(--md-default-bg-color);
+  color: var(--md-default-fg-color);
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+#richdem-playground .rp-action button {
+  width: 100%;
+}
+
+#richdem-playground .rp-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+  gap: 0.6rem;
+  margin: 1rem 0;
+}
+
+#richdem-playground .rp-stat {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.35rem;
+  padding: 0.55rem 0.7rem;
+  background: var(--md-code-bg-color);
+}
+
+#richdem-playground .rp-stat strong {
+  display: block;
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+#richdem-playground .rp-stat span {
+  font-size: 0.68rem;
+  color: var(--md-default-fg-color--light);
+}
+
+#richdem-playground .rp-slider-bar {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.35rem;
+  padding: 0.7rem 0.9rem;
+  background: var(--md-code-bg-color);
+  margin-bottom: 1rem;
+}
+
+#richdem-playground .rp-slider-bar label {
+  display: block;
+  font-size: 0.76rem;
+  margin-bottom: 0.35rem;
+}
+
+#richdem-playground .rp-slider-bar input[type="range"] {
+  width: 100%;
+  cursor: pointer;
+}
+
+#richdem-playground .rp-canvases {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+#richdem-playground .rp-canvases figure {
+  margin: 0;
+}
+
+#richdem-playground .rp-canvases canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.25rem;
+  background: var(--md-code-bg-color);
+  image-rendering: pixelated;
+}
+
+#richdem-playground .rp-canvases figcaption {
+  font-size: 0.72rem;
+  color: var(--md-default-fg-color--light);
+  margin-top: 0.3rem;
+  text-align: center;
+}
+
+#richdem-playground .rp-downloads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+#richdem-playground .rp-downloads .md-button {
+  font-size: 0.74rem;
+  padding: 0.4rem 0.75rem;
+}
+
+#richdem-playground .rp-table-wrap {
+  max-height: 22rem;
+  overflow: auto;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.3rem;
+}
+
+#richdem-playground table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.7rem;
+}
+
+#richdem-playground th,
+#richdem-playground td {
+  padding: 0.3rem 0.4rem;
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+  text-align: right;
+  white-space: nowrap;
+}
+
+#richdem-playground th {
+  position: sticky;
+  top: 0;
+  background: var(--md-code-bg-color);
+  font-weight: 600;
+}
+
+#richdem-playground [hidden] {
+  display: none !important;
+}
+
+#richdem-playground .rp-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+#richdem-playground label.rp-link:focus-within {
+  outline: 2px solid var(--md-accent-fg-color);
+  outline-offset: 2px;
+}

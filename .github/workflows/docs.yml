@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    paths: ["docs/**", "zensical.toml", "requirements_docs.txt", ".github/workflows/docs.yml"]
+    paths: ["docs/**", "js/**", "crates/richdem/**", "zensical.toml", "requirements_docs.txt", ".github/workflows/docs.yml"]
   workflow_dispatch:
 
 permissions:
@@ -26,6 +26,16 @@ jobs:
       - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           enable-cache: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master; toolchain set by input
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: js
+      - uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
+        with:
+          tool: wasm-pack@0.15.1
       - name: Build docs with Zensical
         run: |
           uv venv --python 3.12
@@ -34,6 +44,12 @@ jobs:
           test -f site/CNAME
           test -f site/install.sh
           test -f site/install.ps1
+      - name: Build browser WASM bundle for Playground
+        run: |
+          (cd js && wasm-pack build --target web --release --out-dir ../site/wasm -- --locked)
+          rm -f site/wasm/.gitignore
+          test -f site/wasm/richdem_js.js
+          test -f site/wasm/richdem_js_bg.wasm
       - name: Lint and smoke-test installer scripts
         run: |
           sh -n docs/install.sh
