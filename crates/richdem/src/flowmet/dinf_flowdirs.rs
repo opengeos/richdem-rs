@@ -6,7 +6,7 @@
 
 use std::f64::consts::{PI, SQRT_2};
 
-use crate::array2d::Array2D;
+use crate::array2d::{Array2D, for_each_row_mut};
 use crate::constants::{DINF_NO_DATA, DINF_NO_FLOW};
 use crate::num::DemNum;
 
@@ -100,19 +100,18 @@ fn dinf_flow_dir<T: DemNum>(elevations: &Array2D<T>, x: usize, y: usize) -> f32 
 /// Calculates Tarboton (1997) D-infinity flow direction angles `[0, 2*pi)`.
 pub fn dinf_flow_directions<T: DemNum>(elevations: &Array2D<T>) -> Array2D<f32> {
     let w = elevations.width();
-    let h = elevations.height();
     let mut flowdirs = Array2D::<f32>::make_from_template(elevations, DINF_NO_FLOW);
     flowdirs.set_no_data(DINF_NO_DATA);
 
-    for y in 0..h {
-        for x in 0..w {
-            if elevations.is_no_data(x, y) {
-                flowdirs.set(x, y, DINF_NO_DATA);
+    for_each_row_mut(flowdirs.data_mut(), w, |y, row| {
+        for (x, dst) in row.iter_mut().enumerate() {
+            *dst = if elevations.is_no_data(x, y) {
+                DINF_NO_DATA
             } else {
-                flowdirs.set(x, y, dinf_flow_dir(elevations, x, y));
-            }
+                dinf_flow_dir(elevations, x, y)
+            };
         }
-    }
+    });
 
     flowdirs
 }

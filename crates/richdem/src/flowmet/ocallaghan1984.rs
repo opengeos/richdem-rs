@@ -6,8 +6,8 @@
 
 use std::cmp::Ordering;
 
-use crate::array2d::Array2D;
-use crate::array3d::Array3D;
+use crate::array2d::{Array2D, for_each_row_mut};
+use crate::array3d::{Array3D, FLOW_PROPS_DEPTH};
 use crate::constants::{HAS_FLOW_GEN, NO_DATA_GEN, NO_FLOW_GEN, Topology};
 use crate::num::DemNum;
 
@@ -17,15 +17,15 @@ pub fn fm_ocallaghan<T: DemNum>(elevations: &Array2D<T>, topo: Topology) -> Arra
     let dy = topo.dy();
     let nmax = topo.nmax();
     let w = elevations.width();
-    let h = elevations.height();
 
     let mut props = Array3D::<f32>::make_from_template(elevations, NO_FLOW_GEN);
     props.set_no_data(NO_DATA_GEN);
 
-    for y in 0..h {
+    for_each_row_mut(props.data_mut(), w * FLOW_PROPS_DEPTH, |y, row| {
         for x in 0..w {
+            let cell = &mut row[x * FLOW_PROPS_DEPTH..(x + 1) * FLOW_PROPS_DEPTH];
             if elevations.is_no_data(x, y) {
-                props.set(x, y, 0, NO_DATA_GEN);
+                cell[0] = NO_DATA_GEN;
                 continue;
             }
             if elevations.is_edge_cell(x, y) {
@@ -54,7 +54,7 @@ pub fn fm_ocallaghan<T: DemNum>(elevations: &Array2D<T>, topo: Topology) -> Arra
             if lowest_n == 0 {
                 continue;
             }
-            props.set(x, y, 0, HAS_FLOW_GEN);
+            cell[0] = HAS_FLOW_GEN;
             // Note: for D4, map D4 neighbor index to D8 slot so FlowAccumulation
             // (which iterates D8 offsets 1..=8) routes to the exact same cell!
             let d8_slot = match topo {
@@ -67,9 +67,9 @@ pub fn fm_ocallaghan<T: DemNum>(elevations: &Array2D<T>, topo: Topology) -> Arra
                     _ => unreachable!(),
                 },
             };
-            props.set(x, y, d8_slot, 1.0);
+            cell[d8_slot] = 1.0;
         }
-    }
+    });
 
     props
 }

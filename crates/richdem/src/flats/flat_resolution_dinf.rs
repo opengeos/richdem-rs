@@ -2,7 +2,7 @@
 
 use std::f64::consts::PI;
 
-use crate::array2d::Array2D;
+use crate::array2d::{Array2D, for_each_row_mut};
 use crate::constants::{D8X, D8Y, DINF_NO_FLOW};
 use crate::flats::flat_resolution::resolve_flats_barnes;
 use crate::flowmet::dinf_flowdirs::{AC, AF, DX_E1, DX_E2, DY_E1, DY_E2, dinf_flow_directions};
@@ -78,6 +78,10 @@ fn dinf_masked_flow_dir(
 }
 
 /// Resolves flat cells in a D-infinity flow direction raster using `flat_resolution_mask` and `groups`.
+///
+/// # Panics
+///
+/// Panics if `groups` or `flowdirs` does not have the same dimensions as `flat_resolution_mask`.
 pub fn dinf_flow_flats(
     flat_resolution_mask: &Array2D<i32>,
     groups: &Array2D<i32>,
@@ -85,21 +89,39 @@ pub fn dinf_flow_flats(
 ) {
     let w = flat_resolution_mask.width();
     let h = flat_resolution_mask.height();
+    super::assert_dims_match(
+        groups.width(),
+        groups.height(),
+        w,
+        h,
+        "groups",
+        "flat_resolution_mask",
+    );
+    super::assert_dims_match(
+        flowdirs.width(),
+        flowdirs.height(),
+        w,
+        h,
+        "flowdirs",
+        "flat_resolution_mask",
+    );
+    if w < 3 || h < 3 {
+        return;
+    }
 
-    for x in 1..w.saturating_sub(1) {
-        for y in 1..h.saturating_sub(1) {
+    for_each_row_mut(flowdirs.data_mut(), w, |y, row| {
+        if y == 0 || y + 1 >= h {
+            return;
+        }
+        for (x, dst) in row.iter_mut().enumerate().take(w - 1).skip(1) {
             if flat_resolution_mask.is_no_data(x, y) {
                 continue;
             }
-            if flowdirs.get(x, y) == DINF_NO_FLOW {
-                flowdirs.set(
-                    x,
-                    y,
-                    dinf_masked_flow_dir(flat_resolution_mask, groups, x, y),
-                );
+            if *dst == DINF_NO_FLOW {
+                *dst = dinf_masked_flow_dir(flat_resolution_mask, groups, x, y);
             }
         }
-    }
+    });
 }
 
 /// Computes D-infinity flow directions with Barnes (2014) flat resolution.

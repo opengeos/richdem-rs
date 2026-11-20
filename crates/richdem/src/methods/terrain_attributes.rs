@@ -8,7 +8,7 @@
 
 use std::f64::consts::PI;
 
-use crate::array2d::Array2D;
+use crate::array2d::{Array2D, for_each_row_mut};
 use crate::error::{Error, Result};
 use crate::num::DemNum;
 
@@ -193,43 +193,20 @@ where
     F: Fn(&Array2D<T>, usize, usize, f32) -> f64 + Sync,
 {
     let w = elevations.width();
-    let h = elevations.height();
     let mut output = Array2D::<f32>::make_from_template(elevations, 0.0);
     output.set_no_data(-9999.0);
     let nd = output.no_data();
 
-    #[cfg(feature = "parallel")]
-    {
-        use rayon::prelude::*;
-        output
-            .data_mut()
-            .par_chunks_mut(w.max(1))
-            .enumerate()
-            .for_each(|(y, row)| {
-                for (x, dst) in row.iter_mut().enumerate().take(w) {
-                    *dst = if elevations.is_no_data(x, y) {
-                        nd
-                    } else {
-                        func(elevations, x, y, zscale) as f32
-                    };
-                }
-            });
-    }
-
-    #[cfg(not(feature = "parallel"))]
-    {
-        for y in 0..h {
-            for x in 0..w {
-                if elevations.is_no_data(x, y) {
-                    output.set(x, y, nd);
-                } else {
-                    output.set(x, y, func(elevations, x, y, zscale) as f32);
-                }
-            }
+    for_each_row_mut(output.data_mut(), w, |y, row| {
+        for (x, dst) in row.iter_mut().enumerate() {
+            *dst = if elevations.is_no_data(x, y) {
+                nd
+            } else {
+                func(elevations, x, y, zscale) as f32
+            };
         }
-    }
+    });
 
-    let _ = h;
     output
 }
 

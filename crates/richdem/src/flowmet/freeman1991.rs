@@ -5,22 +5,22 @@
 
 use std::cmp::Ordering;
 
-use crate::array2d::Array2D;
-use crate::array3d::Array3D;
+use crate::array2d::{Array2D, for_each_row_mut};
+use crate::array3d::{Array3D, FLOW_PROPS_DEPTH};
 use crate::constants::{D8X, D8Y, DR, HAS_FLOW_GEN, NO_DATA_GEN, NO_FLOW_GEN};
 use crate::num::DemNum;
 
 /// Computes Freeman (1991) flow proportions with exponent `xparam`.
 pub fn fm_freeman<T: DemNum>(elevations: &Array2D<T>, xparam: f64) -> Array3D<f32> {
     let w = elevations.width();
-    let h = elevations.height();
     let mut props = Array3D::<f32>::make_from_template(elevations, NO_FLOW_GEN);
     props.set_no_data(NO_DATA_GEN);
 
-    for y in 0..h {
+    for_each_row_mut(props.data_mut(), w * FLOW_PROPS_DEPTH, |y, row| {
         for x in 0..w {
+            let cell = &mut row[x * FLOW_PROPS_DEPTH..(x + 1) * FLOW_PROPS_DEPTH];
             if elevations.is_no_data(x, y) {
-                props.set(x, y, 0, NO_DATA_GEN);
+                cell[0] = NO_DATA_GEN;
                 continue;
             }
             if elevations.is_edge_cell(x, y) {
@@ -62,18 +62,18 @@ pub fn fm_freeman<T: DemNum>(elevations: &Array2D<T>, xparam: f64) -> Array3D<f3
                     }
                 }
                 if c_sum > 0.0 {
-                    props.set(x, y, 0, HAS_FLOW_GEN);
+                    cell[0] = HAS_FLOW_GEN;
                     for (n, &wval) in weights.iter().enumerate().skip(1) {
-                        if wval > 0.0 {
-                            props.set(x, y, n, (wval / c_sum) as f32);
+                        cell[n] = if wval > 0.0 {
+                            (wval / c_sum) as f32
                         } else {
-                            props.set(x, y, n, 0.0);
-                        }
+                            0.0
+                        };
                     }
                 }
             }
         }
-    }
+    });
 
     props
 }

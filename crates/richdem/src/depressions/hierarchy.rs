@@ -9,7 +9,7 @@ use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
 use std::fmt::Write as _;
 
-use crate::array2d::{Array2D, STANDARD_GEOTRANSFORM};
+use crate::array2d::{Array2D, STANDARD_GEOTRANSFORM, map_range_ordered};
 use crate::constants::{Flowdir, NO_FLOW, Topology, fp_le};
 use crate::disjoint_set::DisjointDenseIntSet;
 use crate::error::{Error, Result};
@@ -219,7 +219,8 @@ pub fn get_depression_hierarchy<T: DemNum>(
     // Clear any stale flow directions before flood assignment.
     flowdirs.set_all(NO_FLOW);
 
-    for y in 0..h {
+    let scan_ocean_row = |y: usize| -> Vec<FlatIdx> {
+        let mut row_seeds = Vec::new();
         for x in 0..w {
             if label.get(x, y) != OCEAN {
                 continue;
@@ -234,9 +235,14 @@ pub fn get_depression_hierarchy<T: DemNum>(
                 }
             }
             if has_non_ocean {
-                ocean_seeds.push(dem.xy_to_i(x, y) as FlatIdx);
+                row_seeds.push(dem.xy_to_i(x, y) as FlatIdx);
             }
         }
+        row_seeds
+    };
+
+    for row in map_range_ordered(h, scan_ocean_row) {
+        ocean_seeds.extend(row);
     }
 
     // Depression 0 is always the ocean.
@@ -254,7 +260,8 @@ pub fn get_depression_hierarchy<T: DemNum>(
     }
 
     // Find pit cells (cells without any strictly lower neighbor).
-    for y in 0..h {
+    let scan_land_row = |y: usize| -> Vec<FlatIdx> {
+        let mut row_seeds = Vec::new();
         for x in 0..w {
             if label.get(x, y) == OCEAN {
                 continue;
@@ -274,9 +281,14 @@ pub fn get_depression_hierarchy<T: DemNum>(
                 }
             }
             if !has_lower {
-                land_seeds.push(dem.xy_to_i(x, y) as FlatIdx);
+                row_seeds.push(dem.xy_to_i(x, y) as FlatIdx);
             }
         }
+        row_seeds
+    };
+
+    for row in map_range_ordered(h, scan_land_row) {
+        land_seeds.extend(row);
     }
 
     ocean_seeds.sort_unstable();
