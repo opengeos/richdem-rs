@@ -8,7 +8,7 @@ use std::cmp::Ordering;
 use std::collections::VecDeque;
 
 use crate::array2d::Array2D;
-use crate::array3d::Array3D;
+use crate::array3d::{Array3D, FLOW_PROPS_DEPTH};
 use crate::constants::{D8X, D8Y, HAS_FLOW_GEN, NO_FLOW_GEN};
 use crate::error::{Error, Result};
 use crate::flats::find_flats::{IS_A_FLAT, NOT_A_FLAT, find_flats};
@@ -139,7 +139,9 @@ fn find_flat_edges<T: DemNum>(
     let w = flats.width();
     let h = flats.height();
 
-    for y in 0..h {
+    let scan_row = |y: usize| -> (Vec<GridCell>, Vec<GridCell>) {
+        let mut row_low = Vec::new();
+        let mut row_high = Vec::new();
         for x in 0..w {
             if flats.is_no_data(x, y) {
                 continue;
@@ -155,14 +157,29 @@ fn find_flat_edges<T: DemNum>(
                 let nf = flats.get_xy(nx, ny);
                 let ne = elevations.get_xy(nx, ny);
                 if cf == NOT_A_FLAT && nf == IS_A_FLAT && ne.rd_eq(ce) {
-                    low_edges.push_back(GridCell::new(x as i32, y as i32));
+                    row_low.push(GridCell::new(x as i32, y as i32));
                     break;
                 } else if cf == IS_A_FLAT && ce.rd_cmp(ne) == Ordering::Less {
-                    high_edges.push_back(GridCell::new(x as i32, y as i32));
+                    row_high.push(GridCell::new(x as i32, y as i32));
                     break;
                 }
             }
         }
+        (row_low, row_high)
+    };
+
+    #[cfg(feature = "parallel")]
+    let rows: Vec<(Vec<GridCell>, Vec<GridCell>)> = {
+        use rayon::prelude::*;
+        (0..h).into_par_iter().map(scan_row).collect()
+    };
+
+    #[cfg(not(feature = "parallel"))]
+    let rows: Vec<(Vec<GridCell>, Vec<GridCell>)> = (0..h).map(scan_row).collect();
+
+    for (row_low, row_high) in rows {
+        low_edges.extend(row_low);
+        high_edges.extend(row_high);
     }
 }
 
@@ -280,13 +297,21 @@ pub fn resolve_flats_flowdirs_barnes2014(
 ) {
     let w = flat_mask.width();
     let h = flat_mask.height();
+    if w < 3 || h < 3 {
+        return;
+    }
 
-    for y in 1..h.saturating_sub(1) {
-        for x in 1..w.saturating_sub(1) {
+    let row_stride = w * FLOW_PROPS_DEPTH;
+    let process_row = |y: usize, row: &mut [f32]| {
+        if y == 0 || y + 1 >= h {
+            return;
+        }
+        for x in 1..w - 1 {
             if flat_mask.is_no_data(x, y) {
                 continue;
             }
-            if flowdirs.get(x, y, 0) != NO_FLOW_GEN {
+            let cell = &mut row[x * FLOW_PROPS_DEPTH..(x + 1) * FLOW_PROPS_DEPTH];
+            if cell[0] != NO_FLOW_GEN {
                 continue;
             }
             let lbl = labels.get(x, y);
@@ -309,9 +334,26 @@ pub fn resolve_flats_flowdirs_barnes2014(
             }
 
             if flowdir > 0 {
-                flowdirs.set(x, y, 0, HAS_FLOW_GEN);
-                flowdirs.set(x, y, flowdir, 1.0);
+                cell[0] = HAS_FLOW_GEN;
+                cell[flowdir] = 1.0;
             }
+        }
+    };
+
+    #[cfg(feature = "parallel")]
+    {
+        use rayon::prelude::*;
+        flowdirs
+            .data_mut()
+            .par_chunks_mut(row_stride)
+            .enumerate()
+            .for_each(|(y, row)| process_row(y, row));
+    }
+
+    #[cfg(not(feature = "parallel"))]
+    {
+        for (y, row) in flowdirs.data_mut().chunks_mut(row_stride).enumerate() {
+            process_row(y, row);
         }
     }
 }

@@ -85,19 +85,38 @@ pub fn dinf_flow_flats(
 ) {
     let w = flat_resolution_mask.width();
     let h = flat_resolution_mask.height();
+    if w < 3 || h < 3 {
+        return;
+    }
 
-    for x in 1..w.saturating_sub(1) {
-        for y in 1..h.saturating_sub(1) {
+    let process_row = |y: usize, row: &mut [f32]| {
+        if y == 0 || y + 1 >= h {
+            return;
+        }
+        for (x, dst) in row.iter_mut().enumerate().take(w - 1).skip(1) {
             if flat_resolution_mask.is_no_data(x, y) {
                 continue;
             }
-            if flowdirs.get(x, y) == DINF_NO_FLOW {
-                flowdirs.set(
-                    x,
-                    y,
-                    dinf_masked_flow_dir(flat_resolution_mask, groups, x, y),
-                );
+            if *dst == DINF_NO_FLOW {
+                *dst = dinf_masked_flow_dir(flat_resolution_mask, groups, x, y);
             }
+        }
+    };
+
+    #[cfg(feature = "parallel")]
+    {
+        use rayon::prelude::*;
+        flowdirs
+            .data_mut()
+            .par_chunks_mut(w)
+            .enumerate()
+            .for_each(|(y, row)| process_row(y, row));
+    }
+
+    #[cfg(not(feature = "parallel"))]
+    {
+        for (y, row) in flowdirs.data_mut().chunks_mut(w).enumerate() {
+            process_row(y, row);
         }
     }
 }

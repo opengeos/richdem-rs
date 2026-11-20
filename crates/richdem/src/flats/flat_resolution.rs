@@ -49,17 +49,40 @@ pub fn d8_flow_flats<U: DemNum>(
 ) {
     let w = flat_mask.width();
     let h = flat_mask.height();
+    if w < 3 || h < 3 {
+        return;
+    }
     let no_flow = no_flow_sentinel::<U>();
 
-    for y in 1..h.saturating_sub(1) {
-        for x in 1..w.saturating_sub(1) {
+    let process_row = |y: usize, row: &mut [U]| {
+        if y == 0 || y + 1 >= h {
+            return;
+        }
+        for (x, dst) in row.iter_mut().enumerate().take(w - 1).skip(1) {
             if flat_mask.is_no_data(x, y) {
                 continue;
             }
-            if flowdirs.get(x, y).rd_eq(no_flow) {
+            if dst.rd_eq(no_flow) {
                 let d = d8_masked_flow_dir(flat_mask, labels, x, y);
-                flowdirs.set(x, y, U::from_i64(d as i64));
+                *dst = U::from_i64(d as i64);
             }
+        }
+    };
+
+    #[cfg(feature = "parallel")]
+    {
+        use rayon::prelude::*;
+        flowdirs
+            .data_mut()
+            .par_chunks_mut(w)
+            .enumerate()
+            .for_each(|(y, row)| process_row(y, row));
+    }
+
+    #[cfg(not(feature = "parallel"))]
+    {
+        for (y, row) in flowdirs.data_mut().chunks_mut(w).enumerate() {
+            process_row(y, row);
         }
     }
 }
@@ -186,8 +209,13 @@ fn find_flat_edges_fd<T: DemNum, U: DemNum>(
     elevations: &Array2D<T>,
 ) {
     let no_flow = no_flow_sentinel::<U>();
-    for x in 0..flowdirs.width() {
-        for y in 0..flowdirs.height() {
+    let w = flowdirs.width();
+    let h = flowdirs.height();
+
+    let scan_col = |x: usize| -> (Vec<GridCell>, Vec<GridCell>) {
+        let mut col_low = Vec::new();
+        let mut col_high = Vec::new();
+        for y in 0..h {
             if flowdirs.is_no_data(x, y) {
                 continue;
             }
@@ -202,14 +230,29 @@ fn find_flat_edges_fd<T: DemNum, U: DemNum>(
                 let nfd = flowdirs.get_xy(nx, ny);
                 let ne = elevations.get_xy(nx, ny);
                 if !fd.rd_eq(no_flow) && nfd.rd_eq(no_flow) && ne.rd_eq(ce) {
-                    low_edges.push_back(GridCell::new(x as i32, y as i32));
+                    col_low.push(GridCell::new(x as i32, y as i32));
                     break;
                 } else if fd.rd_eq(no_flow) && ce.rd_cmp(ne) == Ordering::Less {
-                    high_edges.push_back(GridCell::new(x as i32, y as i32));
+                    col_high.push(GridCell::new(x as i32, y as i32));
                     break;
                 }
             }
         }
+        (col_low, col_high)
+    };
+
+    #[cfg(feature = "parallel")]
+    let cols: Vec<(Vec<GridCell>, Vec<GridCell>)> = {
+        use rayon::prelude::*;
+        (0..w).into_par_iter().map(scan_col).collect()
+    };
+
+    #[cfg(not(feature = "parallel"))]
+    let cols: Vec<(Vec<GridCell>, Vec<GridCell>)> = (0..w).map(scan_col).collect();
+
+    for (col_low, col_high) in cols {
+        low_edges.extend(col_low);
+        high_edges.extend(col_high);
     }
 }
 
@@ -266,17 +309,41 @@ pub fn d8_flats_alter_dem<T: DemNum>(
     }
     let w = flat_mask.width();
     let h = flat_mask.height();
-    for x in 1..w.saturating_sub(1) {
-        for y in 1..h.saturating_sub(1) {
+    if w < 3 || h < 3 {
+        return Ok(());
+    }
+
+    let process_row = |y: usize, row: &mut [T]| {
+        if y == 0 || y + 1 >= h {
+            return;
+        }
+        for (x, dst) in row.iter_mut().enumerate().take(w - 1).skip(1) {
             if labels.get(x, y) == 0 {
                 continue;
             }
-            let mut cur = elevations.get(x, y);
+            let mut cur = *dst;
             let steps = flat_mask.get(x, y).max(0);
             for _ in 0..steps {
                 cur = cur.next_up_float().unwrap();
             }
-            elevations.set(x, y, cur);
+            *dst = cur;
+        }
+    };
+
+    #[cfg(feature = "parallel")]
+    {
+        use rayon::prelude::*;
+        elevations
+            .data_mut()
+            .par_chunks_mut(w)
+            .enumerate()
+            .for_each(|(y, row)| process_row(y, row));
+    }
+
+    #[cfg(not(feature = "parallel"))]
+    {
+        for (y, row) in elevations.data_mut().chunks_mut(w).enumerate() {
+            process_row(y, row);
         }
     }
     Ok(())

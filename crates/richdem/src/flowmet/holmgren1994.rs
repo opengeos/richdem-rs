@@ -7,7 +7,7 @@
 use std::cmp::Ordering;
 
 use crate::array2d::Array2D;
-use crate::array3d::Array3D;
+use crate::array3d::{Array3D, FLOW_PROPS_DEPTH};
 use crate::constants::{D8X, D8Y, DR, HAS_FLOW_GEN, NO_DATA_GEN, NO_FLOW_GEN};
 use crate::num::DemNum;
 
@@ -21,11 +21,16 @@ pub fn fm_holmgren<T: DemNum>(elevations: &Array2D<T>, xparam: f64) -> Array3D<f
     let h = elevations.height();
     let mut props = Array3D::<f32>::make_from_template(elevations, NO_FLOW_GEN);
     props.set_no_data(NO_DATA_GEN);
+    if w == 0 || h == 0 {
+        return props;
+    }
 
-    for y in 0..h {
+    let row_stride = w * FLOW_PROPS_DEPTH;
+    let process_row = |y: usize, row: &mut [f32]| {
         for x in 0..w {
+            let cell = &mut row[x * FLOW_PROPS_DEPTH..(x + 1) * FLOW_PROPS_DEPTH];
             if elevations.is_no_data(x, y) {
-                props.set(x, y, 0, NO_DATA_GEN);
+                cell[0] = NO_DATA_GEN;
                 continue;
             }
             if elevations.is_edge_cell(x, y) {
@@ -67,16 +72,33 @@ pub fn fm_holmgren<T: DemNum>(elevations: &Array2D<T>, xparam: f64) -> Array3D<f
                     }
                 }
                 if c_sum > 0.0 {
-                    props.set(x, y, 0, HAS_FLOW_GEN);
+                    cell[0] = HAS_FLOW_GEN;
                     for (n, &wval) in weights.iter().enumerate().skip(1) {
-                        if wval > 0.0 {
-                            props.set(x, y, n, (wval / c_sum) as f32);
+                        cell[n] = if wval > 0.0 {
+                            (wval / c_sum) as f32
                         } else {
-                            props.set(x, y, n, 0.0);
-                        }
+                            0.0
+                        };
                     }
                 }
             }
+        }
+    };
+
+    #[cfg(feature = "parallel")]
+    {
+        use rayon::prelude::*;
+        props
+            .data_mut()
+            .par_chunks_mut(row_stride)
+            .enumerate()
+            .for_each(|(y, row)| process_row(y, row));
+    }
+
+    #[cfg(not(feature = "parallel"))]
+    {
+        for (y, row) in props.data_mut().chunks_mut(row_stride).enumerate() {
+            process_row(y, row);
         }
     }
 

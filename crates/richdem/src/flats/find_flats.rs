@@ -20,14 +20,18 @@ pub fn find_flats<T: DemNum>(elevations: &Array2D<T>) -> Array2D<i8> {
     let mut flats = Array2D::<i8>::make_from_template(elevations, NOT_A_FLAT);
     flats.set_no_data(FLAT_NO_DATA);
 
-    for y in 0..h {
-        for x in 0..w {
+    if w == 0 || h == 0 {
+        return flats;
+    }
+
+    let process_row = |y: usize, row: &mut [i8]| {
+        for (x, dst) in row.iter_mut().enumerate().take(w) {
             if elevations.is_no_data(x, y) {
-                flats.set(x, y, FLAT_NO_DATA);
+                *dst = FLAT_NO_DATA;
                 continue;
             }
             if elevations.is_edge_cell(x, y) {
-                flats.set(x, y, NOT_A_FLAT);
+                *dst = NOT_A_FLAT;
                 continue;
             }
 
@@ -43,7 +47,24 @@ pub fn find_flats<T: DemNum>(elevations: &Array2D<T>) -> Array2D<i8> {
                     break;
                 }
             }
-            flats.set(x, y, if is_flat { IS_A_FLAT } else { NOT_A_FLAT });
+            *dst = if is_flat { IS_A_FLAT } else { NOT_A_FLAT };
+        }
+    };
+
+    #[cfg(feature = "parallel")]
+    {
+        use rayon::prelude::*;
+        flats
+            .data_mut()
+            .par_chunks_mut(w)
+            .enumerate()
+            .for_each(|(y, row)| process_row(y, row));
+    }
+
+    #[cfg(not(feature = "parallel"))]
+    {
+        for (y, row) in flats.data_mut().chunks_mut(w).enumerate() {
+            process_row(y, row);
         }
     }
 

@@ -60,15 +60,36 @@ pub fn d8_flow_directions<T: DemNum>(elevations: &Array2D<T>) -> Array2D<D8Flowd
     let mut flowdirs = Array2D::<D8Flowdir>::make_from_template(elevations, NO_FLOW as u8);
     flowdirs.set_no_data(FLOWDIR_NO_DATA);
 
-    for y in 0..h {
-        for x in 0..w {
-            if elevations.is_no_data(x, y)
+    if w == 0 || h == 0 {
+        return flowdirs;
+    }
+
+    let process_row = |y: usize, row: &mut [D8Flowdir]| {
+        for (x, dst) in row.iter_mut().enumerate().take(w) {
+            *dst = if elevations.is_no_data(x, y)
                 || (T::IS_FLOAT && !elevations.get(x, y).to_f64().is_finite())
             {
-                flowdirs.set(x, y, FLOWDIR_NO_DATA);
+                FLOWDIR_NO_DATA
             } else {
-                flowdirs.set(x, y, d8_flow_dir(elevations, x, y));
-            }
+                d8_flow_dir(elevations, x, y)
+            };
+        }
+    };
+
+    #[cfg(feature = "parallel")]
+    {
+        use rayon::prelude::*;
+        flowdirs
+            .data_mut()
+            .par_chunks_mut(w)
+            .enumerate()
+            .for_each(|(y, row)| process_row(y, row));
+    }
+
+    #[cfg(not(feature = "parallel"))]
+    {
+        for (y, row) in flowdirs.data_mut().chunks_mut(w).enumerate() {
+            process_row(y, row);
         }
     }
 

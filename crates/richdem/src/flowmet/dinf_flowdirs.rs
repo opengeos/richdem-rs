@@ -104,13 +104,34 @@ pub fn dinf_flow_directions<T: DemNum>(elevations: &Array2D<T>) -> Array2D<f32> 
     let mut flowdirs = Array2D::<f32>::make_from_template(elevations, DINF_NO_FLOW);
     flowdirs.set_no_data(DINF_NO_DATA);
 
-    for y in 0..h {
-        for x in 0..w {
-            if elevations.is_no_data(x, y) {
-                flowdirs.set(x, y, DINF_NO_DATA);
+    if w == 0 || h == 0 {
+        return flowdirs;
+    }
+
+    let process_row = |y: usize, row: &mut [f32]| {
+        for (x, dst) in row.iter_mut().enumerate().take(w) {
+            *dst = if elevations.is_no_data(x, y) {
+                DINF_NO_DATA
             } else {
-                flowdirs.set(x, y, dinf_flow_dir(elevations, x, y));
-            }
+                dinf_flow_dir(elevations, x, y)
+            };
+        }
+    };
+
+    #[cfg(feature = "parallel")]
+    {
+        use rayon::prelude::*;
+        flowdirs
+            .data_mut()
+            .par_chunks_mut(w)
+            .enumerate()
+            .for_each(|(y, row)| process_row(y, row));
+    }
+
+    #[cfg(not(feature = "parallel"))]
+    {
+        for (y, row) in flowdirs.data_mut().chunks_mut(w).enumerate() {
+            process_row(y, row);
         }
     }
 

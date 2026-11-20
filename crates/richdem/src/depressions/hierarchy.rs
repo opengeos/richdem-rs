@@ -219,7 +219,8 @@ pub fn get_depression_hierarchy<T: DemNum>(
     // Clear any stale flow directions before flood assignment.
     flowdirs.set_all(NO_FLOW);
 
-    for y in 0..h {
+    let scan_ocean_row = |y: usize| -> Vec<FlatIdx> {
+        let mut row_seeds = Vec::new();
         for x in 0..w {
             if label.get(x, y) != OCEAN {
                 continue;
@@ -234,8 +235,24 @@ pub fn get_depression_hierarchy<T: DemNum>(
                 }
             }
             if has_non_ocean {
-                ocean_seeds.push(dem.xy_to_i(x, y) as FlatIdx);
+                row_seeds.push(dem.xy_to_i(x, y) as FlatIdx);
             }
+        }
+        row_seeds
+    };
+
+    #[cfg(feature = "parallel")]
+    {
+        use rayon::prelude::*;
+        let rows: Vec<Vec<FlatIdx>> = (0..h).into_par_iter().map(scan_ocean_row).collect();
+        for row in rows {
+            ocean_seeds.extend(row);
+        }
+    }
+    #[cfg(not(feature = "parallel"))]
+    {
+        for y in 0..h {
+            ocean_seeds.extend(scan_ocean_row(y));
         }
     }
 
@@ -254,7 +271,8 @@ pub fn get_depression_hierarchy<T: DemNum>(
     }
 
     // Find pit cells (cells without any strictly lower neighbor).
-    for y in 0..h {
+    let scan_land_row = |y: usize| -> Vec<FlatIdx> {
+        let mut row_seeds = Vec::new();
         for x in 0..w {
             if label.get(x, y) == OCEAN {
                 continue;
@@ -274,8 +292,24 @@ pub fn get_depression_hierarchy<T: DemNum>(
                 }
             }
             if !has_lower {
-                land_seeds.push(dem.xy_to_i(x, y) as FlatIdx);
+                row_seeds.push(dem.xy_to_i(x, y) as FlatIdx);
             }
+        }
+        row_seeds
+    };
+
+    #[cfg(feature = "parallel")]
+    {
+        use rayon::prelude::*;
+        let rows: Vec<Vec<FlatIdx>> = (0..h).into_par_iter().map(scan_land_row).collect();
+        for row in rows {
+            land_seeds.extend(row);
+        }
+    }
+    #[cfg(not(feature = "parallel"))]
+    {
+        for y in 0..h {
+            land_seeds.extend(scan_land_row(y));
         }
     }
 

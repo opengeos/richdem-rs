@@ -16,11 +16,13 @@ pub fn dem_surface_area<T: DemNum>(elevations: &Array2D<T>, zscale: f64) -> Resu
     let ydist = elevations.get_cell_length_y();
     let planar_diag_dist = xdist.hypot(ydist);
     let cell_planar_area = elevations.get_cell_area();
-    let mut area = 0.0f64;
-    let mut valid_cells = 0usize;
+    let w = elevations.width();
+    let h = elevations.height();
 
-    for y in 0..elevations.height() {
-        for x in 0..elevations.width() {
+    let row_area = |y: usize| -> Result<(f64, usize)> {
+        let mut r_area = 0.0f64;
+        let mut r_valid = 0usize;
+        for x in 0..w {
             if elevations.is_no_data(x, y) {
                 continue;
             }
@@ -28,7 +30,7 @@ pub fn dem_surface_area<T: DemNum>(elevations: &Array2D<T>, zscale: f64) -> Resu
             if !my_elev.is_finite() {
                 continue;
             }
-            valid_cells += 1;
+            r_valid += 1;
             let mut cell_area = 0.0f64;
 
             for (n, &is_diag) in N8_DIAG.iter().enumerate().skip(1) {
@@ -84,8 +86,28 @@ pub fn dem_surface_area<T: DemNum>(elevations: &Array2D<T>, zscale: f64) -> Resu
                     ));
                 }
             }
-            area += cell_area;
+            r_area += cell_area;
         }
+        Ok((r_area, r_valid))
+    };
+
+    #[cfg(feature = "parallel")]
+    let rows: Vec<(f64, usize)> = {
+        use rayon::prelude::*;
+        (0..h)
+            .into_par_iter()
+            .map(row_area)
+            .collect::<Result<Vec<_>>>()?
+    };
+
+    #[cfg(not(feature = "parallel"))]
+    let rows: Vec<(f64, usize)> = (0..h).map(row_area).collect::<Result<Vec<_>>>()?;
+
+    let mut area = 0.0f64;
+    let mut valid_cells = 0usize;
+    for (r_area, r_valid) in rows {
+        area += r_area;
+        valid_cells += r_valid;
     }
 
     let dem_planar_area = (valid_cells as f64) * cell_planar_area;
@@ -103,12 +125,14 @@ pub enum PerimType {
 
 /// Calculates the perimeter of a raster under [`PerimType`].
 pub fn perimeter<T: DemNum>(arr: &Array2D<T>, perim_type: PerimType) -> f64 {
-    let mut vertical_edges: u64 = 0;
-    let mut horizontal_edges: u64 = 0;
-    let mut cell_edges: u64 = 0;
+    let w = arr.width();
+    let h = arr.height();
 
-    for y in 0..arr.height() {
-        for x in 0..arr.width() {
+    let row_counts = |y: usize| -> (u64, u64, u64) {
+        let mut vertical_edges: u64 = 0;
+        let mut horizontal_edges: u64 = 0;
+        let mut cell_edges: u64 = 0;
+        for x in 0..w {
             if arr.is_no_data(x, y) {
                 continue;
             }
@@ -136,7 +160,24 @@ pub fn perimeter<T: DemNum>(arr: &Array2D<T>, perim_type: PerimType) -> f64 {
                 }
             }
         }
-    }
+        (vertical_edges, horizontal_edges, cell_edges)
+    };
+
+    #[cfg(feature = "parallel")]
+    let (vertical_edges, horizontal_edges, cell_edges) = {
+        use rayon::prelude::*;
+        (0..h).into_par_iter().map(row_counts).reduce(
+            || (0u64, 0u64, 0u64),
+            |(v1, h1, c1), (v2, h2, c2)| (v1 + v2, h1 + h2, c1 + c2),
+        )
+    };
+
+    #[cfg(not(feature = "parallel"))]
+    let (vertical_edges, horizontal_edges, cell_edges) = (0..h)
+        .map(row_counts)
+        .fold((0u64, 0u64, 0u64), |(v1, h1, c1), (v2, h2, c2)| {
+            (v1 + v2, h1 + h2, c1 + c2)
+        });
 
     match perim_type {
         PerimType::CellCount => cell_edges as f64,
