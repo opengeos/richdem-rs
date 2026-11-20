@@ -8,7 +8,11 @@ from __future__ import annotations
 
 import copy
 import datetime
-from typing import Any, Iterable, List, Optional, Tuple, Union
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from typing import Self
 
 import numpy as np
 
@@ -16,19 +20,23 @@ from . import _richdem_rs
 from ._richdem_rs import depression_hierarchy
 
 __version__: str = _richdem_rs.__version__
-GDAL_AVAILABLE: bool = True  # Provided natively via pure-Rust terrio (no GDAL install required)
+GDAL_AVAILABLE: bool = (
+    True  # Provided natively via pure-Rust terrio (no GDAL install required)
+)
 NO_FLOW: int = _richdem_rs.NO_FLOW
-STANDARD_GEOTRANSFORM: np.ndarray = np.array([0.0, 1.0, 0.0, 0.0, 0.0, -1.0], dtype=np.float64)
+STANDARD_GEOTRANSFORM: np.ndarray = np.array(
+    [0.0, 1.0, 0.0, 0.0, 0.0, -1.0], dtype=np.float64
+)
 
 
 def _RichDEMVersion() -> str:
     return f"richdem-rs (Python {__version__})"
 
 
-def _AddAnalysis(rda: "rdarray | rd3array", analysis: str) -> None:
+def _AddAnalysis(rda: rdarray | rd3array, analysis: str) -> None:
     if not isinstance(rda, (rdarray, rd3array)):
         raise TypeError("An rdarray or rd3array is required!")
-    nowdate = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f UTC")
+    nowdate = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S.%f UTC")
     metastr = f"\n{nowdate} | {_RichDEMVersion()} | {analysis}"
     if rda.metadata is None:
         rda.metadata = {}
@@ -53,12 +61,12 @@ class rdarray(np.ndarray):
         cls,
         array: Any,
         meta_obj: Any = None,
-        no_data: Optional[Union[float, int]] = None,
+        no_data: float | None = None,
         dtype: Any = None,
         order: Any = None,
-        geotransform: Optional[Iterable[float]] = None,
+        geotransform: Iterable[float] | None = None,
         **kwargs: Any,
-    ) -> "rdarray":
+    ) -> Self:
         obj = np.asarray(array, dtype=dtype, order=order).view(cls)
 
         if meta_obj is not None:
@@ -97,10 +105,10 @@ class rd3array(np.ndarray):
         cls,
         array: Any,
         meta_obj: Any = None,
-        no_data: Optional[Union[float, int]] = None,
+        no_data: float | None = None,
         order: Any = None,
         **kwargs: Any,
-    ) -> "rd3array":
+    ) -> Self:
         obj = np.asarray(array, dtype=np.float32, order=order).view(cls)
 
         if meta_obj is not None:
@@ -130,7 +138,7 @@ class rd3array(np.ndarray):
         self.geotransform = copy.deepcopy(getattr(obj, "geotransform", None))
 
 
-def LoadGDAL(filename: str, no_data: Optional[float] = None) -> rdarray:
+def LoadGDAL(filename: str, no_data: float | None = None) -> rdarray:
     """Read a geospatial raster into an `rdarray` using pure-Rust `terrio` (no GDAL needed)."""
     arr, nd, gt, proj, meta = _richdem_rs.load_raster_terrio(str(filename))
     effective_nd = no_data if no_data is not None else nd
@@ -163,17 +171,21 @@ def FillDepressions(
     epsilon: bool = False,
     in_place: bool = False,
     topology: str = "D8",
-) -> Optional[rdarray]:
+) -> rdarray | None:
     """Fills all depressions in a DEM."""
     if not isinstance(dem, rdarray):
         raise TypeError("A richdem_rs.rdarray is required!")
     data = np.ascontiguousarray(dem, dtype=np.float64)
-    filled = _richdem_rs.fill_depressions_f64(data, float(dem.no_data), bool(epsilon), topology)
+    filled = _richdem_rs.fill_depressions_f64(
+        data, float(dem.no_data), bool(epsilon), topology
+    )
     if in_place:
         dem[...] = filled.astype(dem.dtype, copy=False)
         _AddAnalysis(dem, f"FillDepressions(dem, epsilon={epsilon})")
         return None
-    out = rdarray(filled.astype(dem.dtype, copy=False), meta_obj=dem, no_data=dem.no_data)
+    out = rdarray(
+        filled.astype(dem.dtype, copy=False), meta_obj=dem, no_data=dem.no_data
+    )
     _AddAnalysis(out, f"FillDepressions(dem, epsilon={epsilon})")
     return out
 
@@ -182,7 +194,7 @@ def BreachDepressions(
     dem: rdarray,
     in_place: bool = False,
     topology: str = "D8",
-) -> Optional[rdarray]:
+) -> rdarray | None:
     """Breaches all depressions in a DEM using Lindsay (2016)."""
     if not isinstance(dem, rdarray):
         raise TypeError("A richdem_rs.rdarray is required!")
@@ -192,12 +204,14 @@ def BreachDepressions(
         dem[...] = breached.astype(dem.dtype, copy=False)
         _AddAnalysis(dem, "BreachDepressions(dem)")
         return None
-    out = rdarray(breached.astype(dem.dtype, copy=False), meta_obj=dem, no_data=dem.no_data)
+    out = rdarray(
+        breached.astype(dem.dtype, copy=False), meta_obj=dem, no_data=dem.no_data
+    )
     _AddAnalysis(out, "BreachDepressions(dem)")
     return out
 
 
-def ResolveFlats(dem: rdarray, in_place: bool = False) -> Optional[rdarray]:
+def ResolveFlats(dem: rdarray, in_place: bool = False) -> rdarray | None:
     """Resolves flat surfaces by imposing a local epsilon gradient (Barnes 2014)."""
     if not isinstance(dem, rdarray):
         raise TypeError("A richdem_rs.rdarray is required!")
@@ -207,7 +221,9 @@ def ResolveFlats(dem: rdarray, in_place: bool = False) -> Optional[rdarray]:
         dem[...] = resolved.astype(dem.dtype, copy=False)
         _AddAnalysis(dem, f"ResolveFlats(dem, in_place={in_place})")
         return None
-    out = rdarray(resolved.astype(dem.dtype, copy=False), meta_obj=dem, no_data=dem.no_data)
+    out = rdarray(
+        resolved.astype(dem.dtype, copy=False), meta_obj=dem, no_data=dem.no_data
+    )
     _AddAnalysis(out, f"ResolveFlats(dem, in_place={in_place})")
     return out
 
@@ -215,7 +231,7 @@ def ResolveFlats(dem: rdarray, in_place: bool = False) -> Optional[rdarray]:
 def FlowProportions(
     dem: rdarray,
     method: str,
-    exponent: Optional[float] = None,
+    exponent: float | None = None,
 ) -> rd3array:
     """Calculates 3D `(H, W, 9)` flow proportions for `method`."""
     if not isinstance(dem, rdarray):
@@ -229,42 +245,61 @@ def FlowProportions(
 
 def FlowAccumFromProps(
     props: rd3array,
-    weights: Optional[rdarray] = None,
+    weights: rdarray | None = None,
     in_place: bool = False,
 ) -> rdarray:
     """Calculates flow accumulation from 3D flow proportions."""
     if not isinstance(props, rd3array):
         raise TypeError("A richdem_rs.rd3array is required!")
-    w_arr = np.ascontiguousarray(weights, dtype=np.float64) if weights is not None else None
-    accum_np = _richdem_rs.flow_accum_from_props(np.ascontiguousarray(props, dtype=np.float32), w_arr)
+    w_arr = (
+        np.ascontiguousarray(weights, dtype=np.float64) if weights is not None else None
+    )
+    accum_np = _richdem_rs.flow_accum_from_props(
+        np.ascontiguousarray(props, dtype=np.float32), w_arr
+    )
     if weights is not None and in_place:
         weights[...] = accum_np
-        _AddAnalysis(weights, f"FlowAccumFromProps(props, weights=weights, in_place={in_place})")
+        _AddAnalysis(
+            weights, f"FlowAccumFromProps(props, weights=weights, in_place={in_place})"
+        )
         return weights
     out = rdarray(accum_np, meta_obj=props, no_data=-1)
-    _AddAnalysis(out, f"FlowAccumFromProps(props, weights={'weights' if weights is not None else 'None'}, in_place={in_place})")
+    _AddAnalysis(
+        out,
+        f"FlowAccumFromProps(props, weights={'weights' if weights is not None else 'None'}, in_place={in_place})",
+    )
     return out
 
 
 def FlowAccumulation(
     dem: rdarray,
     method: str,
-    exponent: Optional[float] = None,
-    weights: Optional[rdarray] = None,
+    exponent: float | None = None,
+    weights: rdarray | None = None,
     in_place: bool = False,
 ) -> rdarray:
     """Calculates flow accumulation using any RichDEM flow routing method."""
     if not isinstance(dem, rdarray):
         raise TypeError("A richdem_rs.rdarray is required!")
     data = np.ascontiguousarray(dem, dtype=np.float64)
-    w_arr = np.ascontiguousarray(weights, dtype=np.float64) if weights is not None else None
-    accum_np = _richdem_rs.flow_accumulation_f64(data, float(dem.no_data), method, exponent, w_arr)
+    w_arr = (
+        np.ascontiguousarray(weights, dtype=np.float64) if weights is not None else None
+    )
+    accum_np = _richdem_rs.flow_accumulation_f64(
+        data, float(dem.no_data), method, exponent, w_arr
+    )
     if weights is not None and in_place:
         weights[...] = accum_np
-        _AddAnalysis(weights, f"FlowAccumulation(dem, method={method}, exponent={exponent}, in_place=True)")
+        _AddAnalysis(
+            weights,
+            f"FlowAccumulation(dem, method={method}, exponent={exponent}, in_place=True)",
+        )
         return weights
     out = rdarray(accum_np, meta_obj=dem, no_data=-1)
-    _AddAnalysis(out, f"FlowAccumulation(dem, method={method}, exponent={exponent}, in_place={in_place})")
+    _AddAnalysis(
+        out,
+        f"FlowAccumulation(dem, method={method}, exponent={exponent}, in_place={in_place})",
+    )
     return out
 
 
@@ -290,9 +325,9 @@ def generate_perlin_terrain(size: int, seed: int) -> rdarray:
 
 
 def get_new_depression_hierarchy_labels(
-    shape: Tuple[int, int],
+    shape: tuple[int, int],
     no_data: float = -9999,
-    geotransform: Optional[np.ndarray] = None,
+    geotransform: np.ndarray | None = None,
 ) -> rdarray:
     """Creates a labels array with OCEAN on borders and NO_DEP in the interior."""
     gt = geotransform if geotransform is not None else STANDARD_GEOTRANSFORM
@@ -305,15 +340,19 @@ def get_depression_hierarchy(
     dem: rdarray,
     labels: rdarray,
     topology: str = "D8",
-) -> Tuple[List[depression_hierarchy.Depression], rdarray]:
+) -> tuple[list[depression_hierarchy.Depression], rdarray]:
     """Computes the Depression Hierarchy and downhill flow directions."""
     if not isinstance(dem, rdarray):
         raise TypeError("A richdem_rs.rdarray is required!")
     dem_f64 = np.ascontiguousarray(dem, dtype=np.float64)
     if labels.dtype != np.uint32 or not labels.flags["C_CONTIGUOUS"]:
         raise TypeError("labels must be a C-contiguous uint32 rdarray")
-    dh, fds = depression_hierarchy.get_depression_hierarchy_py(dem_f64, labels, topology)
-    flowdirs = rdarray(fds, no_data=-9999, geotransform=dem.geotransform or STANDARD_GEOTRANSFORM)
+    dh, fds = depression_hierarchy.get_depression_hierarchy_py(
+        dem_f64, labels, topology
+    )
+    flowdirs = rdarray(
+        fds, no_data=-9999, geotransform=dem.geotransform or STANDARD_GEOTRANSFORM
+    )
     return dh, flowdirs
 
 
@@ -321,7 +360,7 @@ def fill_spill_merge(
     dem: rdarray,
     labels: rdarray,
     flowdirs: rdarray,
-    deps: List[depression_hierarchy.Depression],
+    deps: list[depression_hierarchy.Depression],
     wtd: rdarray,
 ) -> None:
     """Runs Fill-Spill-Merge, updating `deps` and `wtd` in place."""
@@ -351,7 +390,11 @@ def convert_arc_flowdirs_to_richdem_d8(arc_flowdirs: rdarray) -> rdarray:
     arr = np.ascontiguousarray(arc_flowdirs, dtype=np.uint8)
     out = _richdem_rs.convert_arc_flowdirs_py(arr)
     nd = arc_flowdirs.no_data if isinstance(arc_flowdirs, rdarray) else 255
-    return rdarray(out, meta_obj=arc_flowdirs if isinstance(arc_flowdirs, rdarray) else None, no_data=nd)
+    return rdarray(
+        out,
+        meta_obj=arc_flowdirs if isinstance(arc_flowdirs, rdarray) else None,
+        no_data=nd,
+    )
 
 
 def rdShow(
@@ -360,9 +403,9 @@ def rdShow(
     show: bool = True,
     axes: bool = True,
     cmap: str = "gray",
-    vmin: Optional[float] = None,
-    vmax: Optional[float] = None,
-    figsize: Tuple[int, int] = (4, 4),
+    vmin: float | None = None,
+    vmax: float | None = None,
+    figsize: tuple[int, int] = (4, 4),
 ) -> dict[str, float]:
     """Displays an `rdarray` using matplotlib."""
     import matplotlib.pyplot as plt
@@ -389,16 +432,16 @@ def rdShow(
 
 
 __all__ = (
+    "GDAL_AVAILABLE",
+    "NO_FLOW",
+    "STANDARD_GEOTRANSFORM",
     "BreachDepressions",
     "FillDepressions",
     "FlowAccumFromProps",
     "FlowAccumulation",
     "FlowProportions",
-    "GDAL_AVAILABLE",
     "LoadGDAL",
-    "NO_FLOW",
     "ResolveFlats",
-    "STANDARD_GEOTRANSFORM",
     "SaveGDAL",
     "TerrainAttribute",
     "__version__",

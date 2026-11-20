@@ -17,8 +17,12 @@ def DepressionFilling() -> None:
     )
     parser.add_argument("dem", type=str, help="Elevation model")
     parser.add_argument("outname", type=str, help="Name of output file")
-    parser.add_argument("-g", "--gradient", action="store_true", help="Impose epsilon gradient")
-    parser.add_argument("-v", "--version", action="version", version=rd._RichDEMVersion())
+    parser.add_argument(
+        "-g", "--gradient", action="store_true", help="Impose epsilon gradient"
+    )
+    parser.add_argument(
+        "-v", "--version", action="version", version=rd._RichDEMVersion()
+    )
     args = parser.parse_args()
 
     dem = rd.LoadGDAL(args.dem)
@@ -33,7 +37,9 @@ def BreachDepressions() -> None:
     )
     parser.add_argument("dem", type=str, help="Elevation model")
     parser.add_argument("outname", type=str, help="Name of output file")
-    parser.add_argument("-v", "--version", action="version", version=rd._RichDEMVersion())
+    parser.add_argument(
+        "-v", "--version", action="version", version=rd._RichDEMVersion()
+    )
     args = parser.parse_args()
 
     dem = rd.LoadGDAL(args.dem)
@@ -48,9 +54,15 @@ def FlowAccumulation() -> None:
     )
     parser.add_argument("dem", type=str, help="Elevation model")
     parser.add_argument("outname", type=str, help="Name of output file")
-    parser.add_argument("-m", "--method", type=str, required=True, help="Flow accumulation method")
-    parser.add_argument("-e", "--exponent", type=float, help="Optional exponent (Holmgren/Freeman)")
-    parser.add_argument("-v", "--version", action="version", version=rd._RichDEMVersion())
+    parser.add_argument(
+        "-m", "--method", type=str, required=True, help="Flow accumulation method"
+    )
+    parser.add_argument(
+        "-e", "--exponent", type=float, help="Optional exponent (Holmgren/Freeman)"
+    )
+    parser.add_argument(
+        "-v", "--version", action="version", version=rd._RichDEMVersion()
+    )
     args = parser.parse_args()
 
     dem = rd.LoadGDAL(args.dem)
@@ -65,9 +77,15 @@ def TerrainAttribute() -> None:
     )
     parser.add_argument("dem", type=str, help="Elevation model")
     parser.add_argument("outname", type=str, help="Name of output file")
-    parser.add_argument("-a", "--attrib", type=str, required=True, help="Terrain attribute")
-    parser.add_argument("-z", "--zscale", type=float, default=1.0, help="Z-scale factor")
-    parser.add_argument("-v", "--version", action="version", version=rd._RichDEMVersion())
+    parser.add_argument(
+        "-a", "--attrib", type=str, required=True, help="Terrain attribute"
+    )
+    parser.add_argument(
+        "-z", "--zscale", type=float, default=1.0, help="Z-scale factor"
+    )
+    parser.add_argument(
+        "-v", "--version", action="version", version=rd._RichDEMVersion()
+    )
     args = parser.parse_args()
 
     dem = rd.LoadGDAL(args.dem)

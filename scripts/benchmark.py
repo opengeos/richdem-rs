@@ -32,14 +32,18 @@ def bench_median(fn, warmup: int = 1, iters: int = 3) -> tuple[float, object]:
 
 def compare_suite(size: int, iters: int = 3) -> None:
     cells = size * size
-    print(f"\n=== Python Benchmark: {size} x {size} ({cells:,} cells, float64, median of {iters} runs) ===")
+    print(
+        f"\n=== Python Benchmark: {size} x {size} ({cells:,} cells, float64, median of {iters} runs) ==="
+    )
     print(
         f"| {'Operation':<34} | {'richdem2 (C++)':>14} | {'richdem-rs (Rust)':>17} | {'Speedup':>9} | {'Max |diff|':>11} |"
     )
     print(f"|{'-' * 36}|{'-' * 16}|{'-' * 19}|{'-' * 11}|{'-' * 13}|")
 
     # Generate identical synthetic Perlin DEM for both libraries
-    base_arr = np.ascontiguousarray(rd_rs.generate_perlin_terrain(size, 42), dtype=np.float64)
+    base_arr = np.ascontiguousarray(
+        rd_rs.generate_perlin_terrain(size, 42), dtype=np.float64
+    )
     gt = [0.0, 1.0, 0.0, 0.0, 0.0, -1.0]
 
     dem_cpp = rd_cpp.rdarray(base_arr.copy(), no_data=-9999.0)
@@ -53,7 +57,14 @@ def compare_suite(size: int, iters: int = 3) -> None:
         if check_diff and out_cpp is not None and out_rs is not None:
             a = np.asarray(out_cpp, dtype=np.float64)
             b = np.asarray(out_rs, dtype=np.float64)
-            mask = np.isfinite(a) & np.isfinite(b) & (a != -9999) & (b != -9999) & (a != -1) & (b != -1)
+            mask = (
+                np.isfinite(a)
+                & np.isfinite(b)
+                & (a != -9999)
+                & (b != -9999)
+                & (a != -1)
+                & (b != -1)
+            )
             max_diff = float(np.max(np.abs(a[mask] - b[mask]))) if np.any(mask) else 0.0
             diff_str = f"{max_diff:.2e}"
         else:

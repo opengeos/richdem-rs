@@ -1,7 +1,7 @@
 """Python test suite verifying parity with pyRichDEM."""
 
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
 import numpy as np
 import richdem_rs as rd
