@@ -74,11 +74,22 @@ fn main() -> richdem::Result<()> {
 
 ## Command-Line Interface
 
-Install and run the standalone `richdem` CLI:
+Install the standalone `richdem` CLI (no Rust or GDAL required):
 
 ```sh
-cargo install richdem-cli
+# Linux and macOS
+curl -LsSf https://richdem-rs.opengeos.org/install.sh | sh
 
+# Windows (PowerShell)
+powershell -ExecutionPolicy ByPass -c "irm https://richdem-rs.opengeos.org/install.ps1 | iex"
+
+# Or from crates.io
+cargo install richdem-cli
+```
+
+Example commands:
+
+```sh
 richdem depressions-flood dem.tif filled.tif --gradient --compress
 richdem depressions-breach dem.tif breached.tif --mode complete
 richdem depressions-has dem.tif
