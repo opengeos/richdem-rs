@@ -584,7 +584,7 @@ impl<T: DemNum> Array2D<T> {
         let mut nd_collides = false;
 
         for &v in &self.data {
-            if v.rd_eq(self.no_data) {
+            if v.rd_eq(self.no_data) || (T::IS_FLOAT && !U::IS_FLOAT && v.is_nan()) {
                 is_nd_mask.push(true);
                 data.push(converted_nd);
             } else {

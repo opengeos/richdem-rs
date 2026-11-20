@@ -283,19 +283,21 @@ pub fn priority_flood_flowdirs_barnes2014<T: DemNum>(
     }
 
     let no_data = elevations.no_data();
-    let prio = |v: T| -> T { if v.rd_eq(no_data) { T::NEG_INFINITY } else { v } };
+    let is_missing =
+        |v: T| -> bool { v.rd_eq(no_data) || (T::IS_FLOAT && !v.to_f64().is_finite()) };
+    let prio = |v: T| -> T { if is_missing(v) { T::NEG_INFINITY } else { v } };
 
     for x in 0..w {
         let v = elevations.get(x, 0);
         open.emplace(x as i32, 0, prio(v));
-        if !v.rd_eq(no_data) {
+        if !is_missing(v) {
             flowdirs.set(x, 0, 3);
         }
         closed.set(x, 0, 1);
         if h > 1 {
             let vb = elevations.get(x, h - 1);
             open.emplace(x as i32, (h - 1) as i32, prio(vb));
-            if !vb.rd_eq(no_data) {
+            if !is_missing(vb) {
                 flowdirs.set(x, h - 1, 7);
             }
             closed.set(x, h - 1, 1);
@@ -304,30 +306,30 @@ pub fn priority_flood_flowdirs_barnes2014<T: DemNum>(
     for y in 1..h.saturating_sub(1) {
         let vl = elevations.get(0, y);
         open.emplace(0, y as i32, prio(vl));
-        if !vl.rd_eq(no_data) {
+        if !is_missing(vl) {
             flowdirs.set(0, y, 1);
         }
         closed.set(0, y, 1);
         if w > 1 {
             let vr = elevations.get(w - 1, y);
             open.emplace((w - 1) as i32, y as i32, prio(vr));
-            if !vr.rd_eq(no_data) {
+            if !is_missing(vr) {
                 flowdirs.set(w - 1, y, 5);
             }
             closed.set(w - 1, y, 1);
         }
     }
 
-    if !elevations.is_no_data(0, 0) {
+    if !is_missing(elevations.get(0, 0)) {
         flowdirs.set(0, 0, 2);
     }
-    if !elevations.is_no_data(w - 1, 0) {
+    if !is_missing(elevations.get(w - 1, 0)) {
         flowdirs.set(w - 1, 0, 4);
     }
-    if !elevations.is_no_data(0, h - 1) {
+    if !is_missing(elevations.get(0, h - 1)) {
         flowdirs.set(0, h - 1, 8);
     }
-    if !elevations.is_no_data(w - 1, h - 1) {
+    if !is_missing(elevations.get(w - 1, h - 1)) {
         flowdirs.set(w - 1, h - 1, 6);
     }
 
@@ -343,7 +345,7 @@ pub fn priority_flood_flowdirs_barnes2014<T: DemNum>(
             }
             closed.set_xy(nx, ny, 1);
             let nz = elevations.get_xy(nx, ny);
-            if nz.rd_eq(no_data) {
+            if is_missing(nz) {
                 flowdirs.set_xy(nx, ny, fd_nd);
                 open.emplace(nx, ny, T::NEG_INFINITY);
             } else {

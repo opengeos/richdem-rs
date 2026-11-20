@@ -629,6 +629,17 @@ fn test_nodata_preservation_across_depression_algorithms() {
     let ws = priority_flood_watersheds_barnes2014(&mut d4, true, Topology::D8);
     assert_eq!(d4.get(1, 1), -9999.0);
     assert_eq!(ws.get(1, 1), ws.no_data());
+
+    // Non-NoData NaN cell in priority_flood_flowdirs_barnes2014 is treated as missing
+    let mut nan_dem = Array2D::from_rows(&[
+        &[10.0f64, 10.0, 10.0],
+        &[10.0, f64::NAN, 10.0],
+        &[10.0, 10.0, 10.0],
+    ])
+    .unwrap();
+    nan_dem.set_no_data(-9999.0);
+    let pf_fds = priority_flood_flowdirs_barnes2014(&nan_dem);
+    assert_eq!(pf_fds.get(1, 1), pf_fds.no_data());
 }
 
 #[test]
@@ -736,6 +747,14 @@ fn test_u64_precision_and_cast_nodata_collision_avoidance() {
 
     // Checked Perlin terrain constructor rejects overflowing dimensions cleanly
     assert!(try_generate_perlin_terrain(usize::MAX, 42).is_err());
+
+    // Casting float NaN to integer maps NaN to the target NoData sentinel rather than 0
+    let mut float_nan = Array2D::from_rows(&[&[5.0f64, f64::NAN, -9999.0]]).unwrap();
+    float_nan.set_no_data(-9999.0);
+    let int_cast = float_nan.cast::<i32>();
+    assert_eq!(int_cast.get(0, 0), 5);
+    assert!(int_cast.is_no_data(1, 0));
+    assert!(int_cast.is_no_data(2, 0));
 }
 
 #[test]
