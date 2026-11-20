@@ -37,14 +37,17 @@ jobs:
         run: cargo test --workspace --all-features
 
   python:
-    name: Python bindings
+    name: Python bindings (${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
       - uses: Swatinem/rust-cache@v2
       - name: Build and test Python package
         working-directory: python

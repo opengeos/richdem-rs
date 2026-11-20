@@ -716,6 +716,17 @@ fn test_u64_precision_and_cast_nodata_collision_avoidance() {
     assert_ne!(cast_u8.no_data(), 255);
     assert!(!cast_u8.is_no_data(0, 0));
     assert!(!cast_u8.is_no_data(1, 0));
+
+    // Signed -> unsigned NoData wrap matches from_nodata_f64 semantics
+    let mut signed_src = Array2D::from_rows(&[&[10i16, -9999]]).unwrap();
+    signed_src.set_no_data(-9999);
+    let unsigned_cast = signed_src.cast::<u16>();
+    assert_eq!(unsigned_cast.no_data(), u16::from_nodata_f64(-9999.0));
+    assert!(unsigned_cast.is_no_data(1, 0));
+    assert_eq!(unsigned_cast.get(0, 0), 10);
+
+    // Checked Perlin terrain constructor rejects overflowing dimensions cleanly
+    assert!(try_generate_perlin_terrain(usize::MAX, 42).is_err());
 }
 
 #[test]

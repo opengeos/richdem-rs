@@ -99,7 +99,9 @@ pub use misc::{
 };
 pub use num::DemNum;
 pub use random::{seed_rand, uniform_rand_int, uniform_rand_real};
-pub use terrain_gen::{PerlinNoise, generate_perlin_terrain, generate_perlin_terrain_into};
+pub use terrain_gen::{
+    PerlinNoise, generate_perlin_terrain, generate_perlin_terrain_into, try_generate_perlin_terrain,
+};
 
 /// Crate version string.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

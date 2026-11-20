@@ -15,13 +15,18 @@ use richdem::{
     breach_depressions, convert_arc_flowdirs_to_richdem_d8, convert_taudem_d8_to_richdem_d8,
     d8_flow_accum, d8_flow_directions, dem_surface_area, fill_depressions,
     fill_depressions_epsilon, fill_spill_merge, flow_accumulation, flow_accumulation_by_method,
-    flow_accumulation_from_d8, flow_proportions_by_method, generate_perlin_terrain,
+    flow_accumulation_from_d8, flow_proportions_by_method, try_generate_perlin_terrain,
     get_depression_hierarchy, has_depressions, load_dynamic, pit_mask, resolve_flats_epsilon,
     save_raster, ta_cti, ta_spi, terrain_attribute,
 };
 
 fn to_py_err(e: richdem::Error) -> PyErr {
-    PyRuntimeError::new_err(e.to_string())
+    match e {
+        richdem::Error::InvalidArgument(_) | richdem::Error::DimensionMismatch(_) => {
+            PyValueError::new_err(e.to_string())
+        }
+        other => PyRuntimeError::new_err(other.to_string()),
+    }
 }
 
 fn parse_topology(topo: &str) -> PyResult<Topology> {
@@ -530,7 +535,7 @@ fn generate_perlin_terrain_py<'py>(
     size: usize,
     seed: u32,
 ) -> PyResult<Bound<'py, PyArray2<f64>>> {
-    let rd = generate_perlin_terrain(size, seed);
+    let rd = try_generate_perlin_terrain(size, seed).map_err(to_py_err)?;
     to_py_array2(py, rd)
 }
 

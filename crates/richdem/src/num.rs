@@ -95,6 +95,14 @@ pub trait DemNum:
         Self::from_f64(v)
     }
 
+    /// Convert a NoData sentinel from exact `i128`, preserving the same unsigned
+    /// negative-sentinel wrap as [`Self::from_nodata_f64`] while avoiding `f64`
+    /// rounding for 64-bit integer sentinels.
+    #[inline]
+    fn from_nodata_i128(v: i128) -> Self {
+        Self::from_i128_clamped(v)
+    }
+
     /// Convert to `i64`.
     fn to_i64(self) -> i64;
 
@@ -261,6 +269,15 @@ macro_rules! impl_unsigned_int_dem_num {
             #[inline]
             fn from_nodata_f64(v: f64) -> Self {
                 if v < 0.0 { (v as i64) as $t } else { v as $t }
+            }
+
+            #[inline]
+            fn from_nodata_i128(v: i128) -> Self {
+                if v < 0 {
+                    (v.clamp(i64::MIN as i128, i64::MAX as i128) as i64) as $t
+                } else {
+                    Self::from_i128_clamped(v)
+                }
             }
 
             #[inline]

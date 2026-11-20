@@ -6,8 +6,8 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use richdem::{
-    Array2D, DynamicArray2D, FlowAccumMethod, LindsayMode, NO_DEP, NO_FLOW, OCEAN, TerrainAttr,
-    Topology, breach_depressions, convert_arc_flowdirs_to_richdem_d8,
+    Array2D, DemNum, DynamicArray2D, FlowAccumMethod, LindsayMode, NO_DEP, NO_FLOW, OCEAN,
+    TerrainAttr, Topology, breach_depressions, convert_arc_flowdirs_to_richdem_d8,
     convert_taudem_d8_to_richdem_d8, d8_flow_accum, d8_flow_directions, dem_surface_area,
     fill_depressions, fill_depressions_epsilon, fill_spill_merge, find_flow_loops,
     flow_accumulation_by_method, format_depression_hierarchy, get_depression_hierarchy,
@@ -607,7 +607,7 @@ fn run() -> richdem::Result<()> {
                 );
                 return Ok(());
             }
-            if a.no_data_f64() != b.no_data_f64() {
+            if !a.no_data_f64().rd_eq(b.no_data_f64()) {
                 println!("NoData differs: {} vs {}", a.no_data_f64(), b.no_data_f64());
             }
             if a.geotransform() != b.geotransform() {

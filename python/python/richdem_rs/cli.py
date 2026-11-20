@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 from argparse import RawTextHelpFormatter
 
@@ -149,30 +150,56 @@ def RdCompare() -> None:
         print(f"Validity mismatch cells: {validity_mismatch}")
     valid = ~a_missing & ~b_missing
     if not np.any(valid):
-        max_diff = min_diff = avg_diff = rms_diff = 0.0
+        max_diff: int | float = 0.0
+        min_diff: int | float = 0.0
+        avg_diff = 0.0
+        rms_diff = 0.0
+    elif a_int and b_int and a_raw.dtype.itemsize <= 4 and b_raw.dtype.itemsize <= 4:
+        # <= 32-bit integers fit exactly in signed int64 without overflow or float64 rounding.
+        diff_i64 = a_raw[valid].astype(np.int64) - b_raw[valid].astype(np.int64)
+        abs_i64 = np.abs(diff_i64)
+        max_diff = int(np.max(abs_i64))
+        min_diff = int(np.min(abs_i64))
+        avg_diff = float(np.mean(abs_i64, dtype=np.float64))
+        rms_diff = float(
+            np.sqrt(np.mean(np.square(diff_i64, dtype=np.float64), dtype=np.float64))
+        )
+    elif a_int and b_int:
+        # 64-bit integer rasters: aggregate min/max/sum/sum_sq in exact Python ints before
+        # converting the final average and RMS to float.
+        a_vals = a_raw[valid].ravel()
+        b_vals = b_raw[valid].ravel()
+        n = int(a_vals.size)
+        min_i: int | None = None
+        max_i = 0
+        sum_abs = 0
+        sum_sq = 0
+        for x, y in zip(a_vals, b_vals, strict=True):
+            d = abs(int(x) - int(y))
+            if min_i is None or d < min_i:
+                min_i = d
+            if d > max_i:
+                max_i = d
+            sum_abs += d
+            sum_sq += d * d
+        max_diff = max_i
+        min_diff = 0 if min_i is None else min_i
+        avg_diff = sum_abs / n
+        rms_diff = math.sqrt(sum_sq / n)
     else:
-        if a_int and b_int:
-            # Compute exact arbitrary-precision integer differences before aggregating
-            # so 64-bit integers above 2^53 do not lose precision in float64.
-            diff = np.array(
-                [
-                    int(x) - int(y)
-                    for x, y in zip(
-                        a_raw[valid].ravel(), b_raw[valid].ravel(), strict=True
-                    )
-                ],
-                dtype=np.float64,
-            )
-        else:
-            a = a_raw[valid].astype(np.float64)
-            b = b_raw[valid].astype(np.float64)
-            diff = np.where(a == b, 0.0, a - b)
+        a = a_raw[valid].astype(np.float64)
+        b = b_raw[valid].astype(np.float64)
+        diff = np.where(a == b, 0.0, a - b)
         abs_diff = np.abs(diff)
         max_diff = float(np.max(abs_diff))
         min_diff = float(np.min(abs_diff))
         avg_diff = float(np.mean(abs_diff))
         rms_diff = float(np.sqrt(np.mean(np.square(diff))))
-    print(f"Absolute Max difference: {max_diff:10.6}")
-    print(f"Absolute Min difference: {min_diff:10.6}")
+    if isinstance(max_diff, int) and isinstance(min_diff, int):
+        print(f"Absolute Max difference: {max_diff}")
+        print(f"Absolute Min difference: {min_diff}")
+    else:
+        print(f"Absolute Max difference: {max_diff:10.6}")
+        print(f"Absolute Min difference: {min_diff:10.6}")
     print(f"Absolute Avg difference: {avg_diff:10.6}")
     print(f"RMS difference:          {rms_diff:10.6}")

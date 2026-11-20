@@ -565,7 +565,7 @@ impl<T: DemNum> Array2D<T> {
     /// and the NoData mask without passing integer-to-integer conversions through `f64`.
     pub fn cast<U: DemNum>(&self) -> Array2D<U> {
         let mut converted_nd = if !T::IS_FLOAT && !U::IS_FLOAT {
-            self.no_data.cast_to::<U>()
+            U::from_nodata_i128(self.no_data.to_i128())
         } else {
             U::from_nodata_f64(self.no_data.to_f64())
         };

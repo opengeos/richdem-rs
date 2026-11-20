@@ -223,7 +223,11 @@ pub fn fa_d4<T: DemNum, A: DemNum>(elevations: &Array2D<T>, accum: &mut Array2D<
 }
 
 /// Calculates interior-cell D8 flow accumulation directly from a D8 flow-direction raster,
-/// matching RichDEM's `flow_accumulation_from_d8`.
+/// matching upstream RichDEM's `flow_accumulation_from_d8`.
+///
+/// By upstream convention, only interior cells (`1..width-1`, `1..height-1`) are seeded and
+/// accumulated; edge-ring cells remain `0`. Use [`d8_flow_accum`] for full-grid accumulation
+/// that includes boundary cells.
 pub fn flow_accumulation_from_d8<T: DemNum>(d8_in: &Array2D<T>) -> Array2D<u32> {
     let w = d8_in.width();
     let h = d8_in.height();

@@ -12,7 +12,7 @@
 ## Invariants and gotchas
 
 - **NoData and NaN safety:** Every algorithm must preserve NoData cells without modifying their values, treating non-finite float elevations as missing where appropriate. Use `DemNum::rd_eq` / `rd_cmp` so `NaN` comparisons behave consistently.
-- **Exact integer conversions:** Keep integer-to-integer conversions (`DemNum::cast_to`, `array2d_to_dataset`, `SaveGDAL`) off the `f64` path so `u64`/`i64` values above `2^53` round-trip losslessly.
+- **Exact integer conversions:** Keep integer-to-integer pixel conversions (`DemNum::cast_to`, `array2d_to_dataset`, `SaveGDAL`) off the `f64` path so `u64`/`i64` pixel values above `2^53` round-trip losslessly (note: `terrio::RasterConfig.nodata` is typed `f64` upstream, so NoData metadata sentinels above `2^53` are bounded by `f64` precision). Python hydrologic wrappers (`FillDepressions`, `BreachDepressions`, `FlowAccumulation`, `TerrainAttribute`, etc.) convert input DEMs to `f64` (or `f32` for `float32` epsilon filling) to match upstream `pyRichDEM` and accept default NumPy `int64` arrays.
 - **D-infinity no-flow sentinel:** Use `DINF_NO_FLOW` (`-2.0`) rather than `NO_FLOW` (`0`) for flat/pit cells in D-infinity angle rasters; `0.0` is valid eastward flow.
 - **Checked raster sizing:** Use `checked_mul` for all `width * height` (and `width * height * 9`) calculations and cap preallocation when parsing untrusted headers.
 - **Python packaging (`python/`):** `python/` is excluded from the root Cargo workspace so pure-Rust builds never require `libpython`. Minimum supported Python is **3.11** (`requires-python = ">=3.11"`, `abi3-py311`, `[tool.ruff] target-version = "py311"`). Always build Python bindings inside a virtualenv (`maturin develop --release`).

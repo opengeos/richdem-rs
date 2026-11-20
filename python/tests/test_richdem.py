@@ -139,3 +139,7 @@ def test_python_review_regression_cases() -> None:
     dh, fds = rd.get_depression_hierarchy(dem6, ok_labels)
     assert len(dh) >= 1
     assert fds.shape == (6, 6)
+
+    # 7. Overflowing Perlin terrain size raises ValueError instead of panicking
+    with pytest.raises((ValueError, OverflowError)):
+        rd.generate_perlin_terrain(2**40, 42)

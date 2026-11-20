@@ -161,6 +161,25 @@ pub fn generate_perlin_terrain_into(arr: &mut Array2D<f64>, seed: u32) -> Result
     Ok(())
 }
 
+/// Generates a square `size x size` synthetic terrain using Perlin noise, returning an error
+/// if `size * size` overflows `usize` or cannot be allocated.
+pub fn try_generate_perlin_terrain(size: usize, seed: u32) -> Result<Array2D<f64>> {
+    let total = size.checked_mul(size).ok_or_else(|| {
+        Error::InvalidArgument(format!("Perlin terrain size {size}x{size} overflows usize"))
+    })?;
+    let mut data = Vec::<f64>::new();
+    data.try_reserve_exact(total).map_err(|e| {
+        Error::InvalidArgument(format!(
+            "Failed to allocate {size}x{size} Perlin terrain: {e}"
+        ))
+    })?;
+    data.resize(total, 0.0);
+    let mut arr = Array2D::from_vec(size, size, data)?;
+    arr.set_no_data(-9999.0);
+    generate_perlin_terrain_into(&mut arr, seed)?;
+    Ok(arr)
+}
+
 /// Generates a square `size x size` synthetic terrain using Perlin noise.
 pub fn generate_perlin_terrain(size: usize, seed: u32) -> Array2D<f64> {
     let mut arr = Array2D::new(size, size, 0.0);
