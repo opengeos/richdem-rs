@@ -1109,3 +1109,17 @@ pub(crate) fn for_each_row_mut<T: Send>(
         }
     }
 }
+
+/// Evaluates `f(i)` for every `i` in `0..n` in deterministic index order,
+/// running across threads with `rayon` when `feature = "parallel"` is enabled.
+pub(crate) fn map_range_ordered<T: Send>(n: usize, f: impl Fn(usize) -> T + Sync + Send) -> Vec<T> {
+    #[cfg(feature = "parallel")]
+    {
+        use rayon::prelude::*;
+        (0..n).into_par_iter().map(f).collect()
+    }
+    #[cfg(not(feature = "parallel"))]
+    {
+        (0..n).map(f).collect()
+    }
+}

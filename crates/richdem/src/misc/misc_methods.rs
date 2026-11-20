@@ -1,12 +1,15 @@
 //! Miscellaneous raster methods: surface area (Jenness 2004), perimeter,
 //! bucket fill, and flow loop checking.
 
-use crate::array2d::Array2D;
+use crate::array2d::{Array2D, map_range_ordered};
 use crate::constants::{D8X, D8Y, N8_DIAG, NO_FLOW, Topology};
 use crate::error::{Error, Result};
 use crate::num::DemNum;
 
 /// Calculates topographic surface area of a DEM using Jenness (2004).
+///
+/// Accumulates deterministic per-row partial sums in row order so parallel and
+/// serial builds produce identical results across thread counts.
 ///
 /// Reference: Jenness, J.S., 2004. Calculating landscape surface area from digital
 /// elevation models. Wildlife Society Bulletin 32, 829-839.
@@ -91,21 +94,10 @@ pub fn dem_surface_area<T: DemNum>(elevations: &Array2D<T>, zscale: f64) -> Resu
         Ok((r_area, r_valid))
     };
 
-    #[cfg(feature = "parallel")]
-    let rows: Vec<(f64, usize)> = {
-        use rayon::prelude::*;
-        (0..h)
-            .into_par_iter()
-            .map(row_area)
-            .collect::<Result<Vec<_>>>()?
-    };
-
-    #[cfg(not(feature = "parallel"))]
-    let rows: Vec<(f64, usize)> = (0..h).map(row_area).collect::<Result<Vec<_>>>()?;
-
     let mut area = 0.0f64;
     let mut valid_cells = 0usize;
-    for (r_area, r_valid) in rows {
+    for row in map_range_ordered(h, row_area) {
+        let (r_area, r_valid) = row?;
         area += r_area;
         valid_cells += r_valid;
     }
@@ -163,18 +155,8 @@ pub fn perimeter<T: DemNum>(arr: &Array2D<T>, perim_type: PerimType) -> f64 {
         (vertical_edges, horizontal_edges, cell_edges)
     };
 
-    #[cfg(feature = "parallel")]
-    let (vertical_edges, horizontal_edges, cell_edges) = {
-        use rayon::prelude::*;
-        (0..h).into_par_iter().map(row_counts).reduce(
-            || (0u64, 0u64, 0u64),
-            |(v1, h1, c1), (v2, h2, c2)| (v1 + v2, h1 + h2, c1 + c2),
-        )
-    };
-
-    #[cfg(not(feature = "parallel"))]
-    let (vertical_edges, horizontal_edges, cell_edges) = (0..h)
-        .map(row_counts)
+    let (vertical_edges, horizontal_edges, cell_edges) = map_range_ordered(h, row_counts)
+        .into_iter()
         .fold((0u64, 0u64, 0u64), |(v1, h1, c1), (v2, h2, c2)| {
             (v1 + v2, h1 + h2, c1 + c2)
         });

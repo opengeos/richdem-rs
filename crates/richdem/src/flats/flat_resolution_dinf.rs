@@ -85,6 +85,18 @@ pub fn dinf_flow_flats(
 ) {
     let w = flat_resolution_mask.width();
     let h = flat_resolution_mask.height();
+    assert_eq!(
+        flowdirs.width(),
+        w,
+        "flowdirs width ({}) must match flat_resolution_mask width ({w})",
+        flowdirs.width()
+    );
+    assert_eq!(
+        flowdirs.height(),
+        h,
+        "flowdirs height ({}) must match flat_resolution_mask height ({h})",
+        flowdirs.height()
+    );
     if w < 3 || h < 3 {
         return;
     }

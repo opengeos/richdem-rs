@@ -3,7 +3,7 @@
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 
-use crate::array2d::{Array2D, for_each_row_mut};
+use crate::array2d::{Array2D, for_each_row_mut, map_range_ordered};
 use crate::constants::{D8Flowdir, D8X, D8Y, DINF_NO_FLOW, NO_FLOW};
 use crate::error::{Error, Result};
 use crate::flowmet::d8_flowdirs::d8_flow_directions;
@@ -49,6 +49,18 @@ pub fn d8_flow_flats<U: DemNum>(
 ) {
     let w = flat_mask.width();
     let h = flat_mask.height();
+    assert_eq!(
+        flowdirs.width(),
+        w,
+        "flowdirs width ({}) must match flat_mask width ({w})",
+        flowdirs.width()
+    );
+    assert_eq!(
+        flowdirs.height(),
+        h,
+        "flowdirs height ({}) must match flat_mask height ({h})",
+        flowdirs.height()
+    );
     if w < 3 || h < 3 {
         return;
     }
@@ -224,16 +236,7 @@ fn find_flat_edges_fd<T: DemNum, U: DemNum>(
         (col_low, col_high)
     };
 
-    #[cfg(feature = "parallel")]
-    let cols: Vec<(Vec<GridCell>, Vec<GridCell>)> = {
-        use rayon::prelude::*;
-        (0..w).into_par_iter().map(scan_col).collect()
-    };
-
-    #[cfg(not(feature = "parallel"))]
-    let cols: Vec<(Vec<GridCell>, Vec<GridCell>)> = (0..w).map(scan_col).collect();
-
-    for (col_low, col_high) in cols {
+    for (col_low, col_high) in map_range_ordered(w, scan_col) {
         low_edges.extend(col_low);
         high_edges.extend(col_high);
     }
@@ -292,6 +295,13 @@ pub fn d8_flats_alter_dem<T: DemNum>(
     }
     let w = flat_mask.width();
     let h = flat_mask.height();
+    if elevations.width() != w || elevations.height() != h {
+        return Err(Error::DimensionMismatch(format!(
+            "elevations ({}x{}) must match flat_mask ({w}x{h})",
+            elevations.width(),
+            elevations.height()
+        )));
+    }
     if w < 3 || h < 3 {
         return Ok(());
     }

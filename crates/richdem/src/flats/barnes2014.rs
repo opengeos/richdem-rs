@@ -7,7 +7,7 @@
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 
-use crate::array2d::{Array2D, for_each_row_mut};
+use crate::array2d::{Array2D, for_each_row_mut, map_range_ordered};
 use crate::array3d::{Array3D, FLOW_PROPS_DEPTH};
 use crate::constants::{D8X, D8Y, HAS_FLOW_GEN, NO_FLOW_GEN};
 use crate::error::{Error, Result};
@@ -168,16 +168,7 @@ fn find_flat_edges<T: DemNum>(
         (row_low, row_high)
     };
 
-    #[cfg(feature = "parallel")]
-    let rows: Vec<(Vec<GridCell>, Vec<GridCell>)> = {
-        use rayon::prelude::*;
-        (0..h).into_par_iter().map(scan_row).collect()
-    };
-
-    #[cfg(not(feature = "parallel"))]
-    let rows: Vec<(Vec<GridCell>, Vec<GridCell>)> = (0..h).map(scan_row).collect();
-
-    for (row_low, row_high) in rows {
+    for (row_low, row_high) in map_range_ordered(h, scan_row) {
         low_edges.extend(row_low);
         high_edges.extend(row_high);
     }
@@ -297,6 +288,18 @@ pub fn resolve_flats_flowdirs_barnes2014(
 ) {
     let w = flat_mask.width();
     let h = flat_mask.height();
+    assert_eq!(
+        flowdirs.width(),
+        w,
+        "flowdirs width ({}) must match flat_mask width ({w})",
+        flowdirs.width()
+    );
+    assert_eq!(
+        flowdirs.height(),
+        h,
+        "flowdirs height ({}) must match flat_mask height ({h})",
+        flowdirs.height()
+    );
     if w < 3 || h < 3 {
         return;
     }

@@ -9,7 +9,7 @@ use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
 use std::fmt::Write as _;
 
-use crate::array2d::{Array2D, STANDARD_GEOTRANSFORM};
+use crate::array2d::{Array2D, STANDARD_GEOTRANSFORM, map_range_ordered};
 use crate::constants::{Flowdir, NO_FLOW, Topology, fp_le};
 use crate::disjoint_set::DisjointDenseIntSet;
 use crate::error::{Error, Result};
@@ -241,19 +241,8 @@ pub fn get_depression_hierarchy<T: DemNum>(
         row_seeds
     };
 
-    #[cfg(feature = "parallel")]
-    {
-        use rayon::prelude::*;
-        let rows: Vec<Vec<FlatIdx>> = (0..h).into_par_iter().map(scan_ocean_row).collect();
-        for row in rows {
-            ocean_seeds.extend(row);
-        }
-    }
-    #[cfg(not(feature = "parallel"))]
-    {
-        for y in 0..h {
-            ocean_seeds.extend(scan_ocean_row(y));
-        }
+    for row in map_range_ordered(h, scan_ocean_row) {
+        ocean_seeds.extend(row);
     }
 
     // Depression 0 is always the ocean.
@@ -298,19 +287,8 @@ pub fn get_depression_hierarchy<T: DemNum>(
         row_seeds
     };
 
-    #[cfg(feature = "parallel")]
-    {
-        use rayon::prelude::*;
-        let rows: Vec<Vec<FlatIdx>> = (0..h).into_par_iter().map(scan_land_row).collect();
-        for row in rows {
-            land_seeds.extend(row);
-        }
-    }
-    #[cfg(not(feature = "parallel"))]
-    {
-        for y in 0..h {
-            land_seeds.extend(scan_land_row(y));
-        }
+    for row in map_range_ordered(h, scan_land_row) {
+        land_seeds.extend(row);
     }
 
     ocean_seeds.sort_unstable();
