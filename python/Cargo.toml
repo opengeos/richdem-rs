@@ -16,5 +16,5 @@ doctest = false
 
 [dependencies]
 richdem = { path = "../crates/richdem", features = ["terrio", "parallel"] }
-pyo3 = { version = "0.29", features = ["extension-module", "abi3-py310"] }
+pyo3 = { version = "0.29", features = ["extension-module", "abi3-py311"] }
 numpy = "0.29"

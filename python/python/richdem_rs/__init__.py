@@ -36,9 +36,7 @@ def _RichDEMVersion() -> str:
 def _AddAnalysis(rda: rdarray | rd3array, analysis: str) -> None:
     if not isinstance(rda, (rdarray, rd3array)):
         raise TypeError("An rdarray or rd3array is required!")
-    nowdate = datetime.datetime.now(datetime.timezone.utc).strftime(
-        "%Y-%m-%d %H:%M:%S.%f UTC"
-    )
+    nowdate = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S.%f UTC")
     metastr = f"\n{nowdate} | {_RichDEMVersion()} | {analysis}"
     if rda.metadata is None:
         rda.metadata = {}

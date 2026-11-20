@@ -8,7 +8,8 @@ dynamic = ["version"]
 description = "High-performance DEM hydrologic and terrain analysis in pure Rust (port of Richard Barnes's RichDEM)"
 readme = "README.md"
 license = "GPL-3.0-only"
-requires-python = ">=3.10"
+license-files = ["LICENSE", "NOTICE"]
+requires-python = ">=3.11"
 authors = [
     { name = "Richard Barnes", email = "rbarnes@umn.edu" },
     { name = "Qiusheng Wu", email = "giswqs@gmail.com" },
@@ -46,9 +47,13 @@ Issues = "https://github.com/opengeos/richdem-rs/issues"
 module-name = "richdem_rs._richdem_rs"
 python-source = "python"
 manifest-path = "Cargo.toml"
+include = [
+    { path = "LICENSE", format = "sdist" },
+    { path = "NOTICE", format = "sdist" },
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
