@@ -14,7 +14,11 @@ pub const STANDARD_GEOTRANSFORM: [f64; 6] = [0.0, 1.0, 0.0, 0.0, 0.0, -1.0];
 
 /// A 2D row-major raster array with geospatial metadata (geotransform, projection, NoData, tags).
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(try_from = "Array2DWire<T>")
+)]
 pub struct Array2D<T: DemNum> {
     width: usize,
     height: usize,
@@ -30,6 +34,36 @@ pub struct Array2D<T: DemNum> {
     pub filename: String,
     /// Source basename if applicable.
     pub basename: String,
+}
+
+#[cfg(feature = "serde")]
+#[derive(serde::Deserialize)]
+struct Array2DWire<T> {
+    width: usize,
+    height: usize,
+    data: Vec<T>,
+    no_data: T,
+    geotransform: [f64; 6],
+    projection: String,
+    metadata: BTreeMap<String, String>,
+    filename: String,
+    basename: String,
+}
+
+#[cfg(feature = "serde")]
+impl<T: DemNum> TryFrom<Array2DWire<T>> for Array2D<T> {
+    type Error = Error;
+
+    fn try_from(w: Array2DWire<T>) -> Result<Self> {
+        let mut arr = Array2D::from_vec(w.width, w.height, w.data)?;
+        arr.no_data = w.no_data;
+        arr.geotransform = w.geotransform;
+        arr.projection = w.projection;
+        arr.metadata = w.metadata;
+        arr.filename = w.filename;
+        arr.basename = w.basename;
+        Ok(arr)
+    }
 }
 
 impl<T: DemNum> PartialEq for Array2D<T> {
@@ -63,10 +97,13 @@ impl<T: DemNum> Default for Array2D<T> {
 impl<T: DemNum> Array2D<T> {
     /// Creates a `width x height` raster filled with `fill`.
     pub fn new(width: usize, height: usize, fill: T) -> Self {
+        let count = width
+            .checked_mul(height)
+            .expect("Array2D dimensions overflow usize");
         Self {
             width,
             height,
-            data: vec![fill; width * height],
+            data: vec![fill; count],
             no_data: T::ZERO,
             geotransform: STANDARD_GEOTRANSFORM,
             projection: String::new(),
@@ -78,12 +115,14 @@ impl<T: DemNum> Array2D<T> {
 
     /// Creates a raster from an existing row-major buffer of length `width * height`.
     pub fn from_vec(width: usize, height: usize, data: Vec<T>) -> Result<Self> {
-        if data.len() != width * height {
+        let expected = width.checked_mul(height).ok_or_else(|| {
+            Error::DimensionMismatch(format!(
+                "Array2D dimensions overflow usize ({width}x{height})"
+            ))
+        })?;
+        if data.len() != expected {
             return Err(Error::DimensionMismatch(format!(
-                "expected {} elements ({}x{}), got {}",
-                width * height,
-                width,
-                height,
+                "expected {expected} elements ({width}x{height}), got {}",
                 data.len()
             )));
         }
@@ -104,7 +143,12 @@ impl<T: DemNum> Array2D<T> {
     pub fn from_rows(rows: &[&[T]]) -> Result<Self> {
         let height = rows.len();
         let width = rows.first().map_or(0, |r| r.len());
-        let mut data = Vec::with_capacity(width * height);
+        let expected = width.checked_mul(height).ok_or_else(|| {
+            Error::DimensionMismatch(format!(
+                "Array2D dimensions overflow usize ({width}x{height})"
+            ))
+        })?;
+        let mut data = Vec::with_capacity(expected);
         for (y, row) in rows.iter().enumerate() {
             if row.len() != width {
                 return Err(Error::DimensionMismatch(format!(
@@ -136,10 +180,13 @@ impl<T: DemNum> Array2D<T> {
 
     /// Resizes the raster to `width x height`, filling with `fill`.
     pub fn resize(&mut self, width: usize, height: usize, fill: T) {
+        let count = width
+            .checked_mul(height)
+            .expect("Array2D dimensions overflow usize");
+        let new_data = vec![fill; count];
         self.width = width;
         self.height = height;
-        self.data.clear();
-        self.data.resize(width * height, fill);
+        self.data = new_data;
     }
 
     /// Resizes the raster to match `other`'s dimensions and copies its metadata.
@@ -164,7 +211,12 @@ impl<T: DemNum> Array2D<T> {
                 self.width, self.height, new_width, new_height
             )));
         }
-        let mut new_data = vec![fill; new_width * new_height];
+        let count = new_width.checked_mul(new_height).ok_or_else(|| {
+            Error::DimensionMismatch(format!(
+                "Array2D dimensions overflow usize ({new_width}x{new_height})"
+            ))
+        })?;
+        let mut new_data = vec![fill; count];
         for y in 0..self.height {
             let src_start = y * self.width;
             let dst_start = y * new_width;
@@ -252,9 +304,12 @@ impl<T: DemNum> Array2D<T> {
     /// Computes neighbor flat index from flat index `i` and signed offset `(dx, dy)`.
     #[inline]
     pub fn n_to_i(&self, i: usize, dx: i32, dy: i32) -> Option<usize> {
-        let x = (i % self.width) as i32 + dx;
-        let y = (i / self.width) as i32 + dy;
-        if self.in_grid(x, y) {
+        if self.width == 0 || i >= self.data.len() {
+            return None;
+        }
+        let x = (i % self.width) as i64 + i64::from(dx);
+        let y = (i / self.width) as i64 + i64::from(dy);
+        if x >= 0 && y >= 0 && (x as usize) < self.width && (y as usize) < self.height {
             Some((y as usize) * self.width + (x as usize))
         } else {
             None
@@ -420,7 +475,10 @@ impl<T: DemNum> Array2D<T> {
         }
     }
 
-    /// Minimum valid (non-NoData) value in the raster.
+    /// Minimum valid (non-NoData, non-NaN) value in the raster.
+    ///
+    /// `NaN` values are excluded independently of `no_data`; returns `None` if all
+    /// cells are NoData or `NaN`.
     pub fn min(&self) -> Option<T> {
         let mut best: Option<T> = None;
         for &v in &self.data {
@@ -435,7 +493,10 @@ impl<T: DemNum> Array2D<T> {
         best
     }
 
-    /// Maximum valid (non-NoData) value in the raster.
+    /// Maximum valid (non-NoData, non-NaN) value in the raster.
+    ///
+    /// `NaN` values are excluded independently of `no_data`; returns `None` if all
+    /// cells are NoData or `NaN`.
     pub fn max(&self) -> Option<T> {
         let mut best: Option<T> = None;
         for &v in &self.data {
@@ -455,24 +516,32 @@ impl<T: DemNum> Array2D<T> {
         self.data.iter().filter(|v| v.rd_eq(val)).count()
     }
 
-    /// X cell resolution (`|geotransform[1]|`).
+    /// X cell resolution (`hypot(geotransform[1], geotransform[4])`, falling back to `1.0`).
     #[inline]
     pub fn get_cell_length_x(&self) -> f64 {
-        let v = self.geotransform[1].abs();
+        let v = self.geotransform[1].hypot(self.geotransform[4]);
         if v == 0.0 { 1.0 } else { v }
     }
 
-    /// Y cell resolution (`|geotransform[5]|`).
+    /// Y cell resolution (`hypot(geotransform[2], geotransform[5])`, falling back to `1.0`).
     #[inline]
     pub fn get_cell_length_y(&self) -> f64 {
-        let v = self.geotransform[5].abs();
+        let v = self.geotransform[2].hypot(self.geotransform[5]);
         if v == 0.0 { 1.0 } else { v }
     }
 
-    /// Cell area (`get_cell_length_x() * get_cell_length_y()`).
+    /// Cell area computed from the affine determinant `|gt[1]*gt[5] - gt[2]*gt[4]|`
+    /// (falling back to `get_cell_length_x() * get_cell_length_y()` if degenerate).
     #[inline]
     pub fn get_cell_area(&self) -> f64 {
-        self.get_cell_length_x() * self.get_cell_length_y()
+        let det = (self.geotransform[1] * self.geotransform[5]
+            - self.geotransform[2] * self.geotransform[4])
+            .abs();
+        if det == 0.0 {
+            self.get_cell_length_x() * self.get_cell_length_y()
+        } else {
+            det
+        }
     }
 
     /// Appends an entry to the `PROCESSING_HISTORY` metadata item.
@@ -492,22 +561,75 @@ impl<T: DemNum> Array2D<T> {
         );
     }
 
-    /// Converts all pixel values to another `DemNum` type, preserving geospatial metadata.
+    /// Converts all pixel values to another `DemNum` type, preserving geospatial metadata
+    /// and the NoData mask without passing integer-to-integer conversions through `f64`.
     pub fn cast<U: DemNum>(&self) -> Array2D<U> {
-        let data = self.data.iter().map(|&v| U::from_f64(v.to_f64())).collect();
-        let mut out = Array2D {
+        let mut has_nodata = false;
+        let mut converted_nd = if !T::IS_FLOAT && !U::IS_FLOAT {
+            self.no_data.cast_to::<U>()
+        } else {
+            U::from_nodata_f64(self.no_data.to_f64())
+        };
+
+        let mut data: Vec<U> = Vec::with_capacity(self.data.len());
+        let mut is_nd_mask: Vec<bool> = Vec::with_capacity(self.data.len());
+        let mut nd_collides = false;
+
+        for &v in &self.data {
+            if v.rd_eq(self.no_data) {
+                has_nodata = true;
+                is_nd_mask.push(true);
+                data.push(converted_nd);
+            } else {
+                is_nd_mask.push(false);
+                let cv = v.cast_to::<U>();
+                if cv.rd_eq(converted_nd) {
+                    nd_collides = true;
+                }
+                data.push(cv);
+            }
+        }
+
+        if has_nodata && nd_collides {
+            // Pick a target sentinel unused by any valid pixel so the NoData mask is preserved.
+            let candidates: [U; 4] = [
+                U::MAX,
+                U::LOWEST,
+                U::esri_default_no_data(),
+                U::from_i64(-1),
+            ];
+            let mut chosen = None;
+            for cand in candidates {
+                if !data
+                    .iter()
+                    .zip(is_nd_mask.iter())
+                    .any(|(&val, &nd)| !nd && val.rd_eq(cand))
+                {
+                    chosen = Some(cand);
+                    break;
+                }
+            }
+            if let Some(new_nd) = chosen {
+                converted_nd = new_nd;
+                for (slot, &nd) in data.iter_mut().zip(is_nd_mask.iter()) {
+                    if nd {
+                        *slot = converted_nd;
+                    }
+                }
+            }
+        }
+
+        Array2D {
             width: self.width,
             height: self.height,
             data,
-            no_data: U::from_f64(self.no_data.to_f64()),
+            no_data: converted_nd,
             geotransform: self.geotransform,
             projection: self.projection.clone(),
             metadata: self.metadata.clone(),
             filename: self.filename.clone(),
             basename: self.basename.clone(),
-        };
-        out.set_no_data(U::from_f64(self.no_data.to_f64()));
-        out
+        }
     }
 
     /// Formats the raster as a human-readable ASCII grid table.
@@ -541,8 +663,8 @@ impl<T: DemNum> Array2D<T> {
         let mut cellsize: Option<f64> = None;
         let mut dx: Option<f64> = None;
         let mut dy: Option<f64> = None;
-        let mut nodata: Option<f64> = None;
-        let mut data_tokens: Vec<String> = Vec::new();
+        let mut nodata: Option<T> = None;
+        let mut first_data_line: Option<String> = None;
 
         for line_res in &mut lines {
             let line = line_res?;
@@ -641,14 +763,19 @@ impl<T: DemNum> Array2D<T> {
                     let v = parts
                         .next()
                         .ok_or_else(|| Error::Parse("missing NODATA_value".into()))?;
-                    nodata = Some(
-                        v.parse::<f64>()
-                            .map_err(|e| Error::Parse(format!("invalid NODATA_value: {e}")))?,
-                    );
+                    let parsed_nd = match v.parse::<T>() {
+                        Ok(val) => val,
+                        Err(_) => {
+                            let f = v
+                                .parse::<f64>()
+                                .map_err(|e| Error::Parse(format!("invalid NODATA_value: {e}")))?;
+                            T::from_nodata_f64(f)
+                        }
+                    };
+                    nodata = Some(parsed_nd);
                 }
                 _ => {
-                    data_tokens.push(first.to_string());
-                    data_tokens.extend(parts.map(str::to_string));
+                    first_data_line = Some(line);
                     break;
                 }
             }
@@ -656,33 +783,53 @@ impl<T: DemNum> Array2D<T> {
 
         let width = ncols.ok_or_else(|| Error::Parse("missing ncols header".into()))?;
         let height = nrows.ok_or_else(|| Error::Parse("missing nrows header".into()))?;
-        let expected = width * height;
-
-        for line_res in lines {
-            let line = line_res?;
-            data_tokens.extend(line.split_whitespace().map(str::to_string));
-        }
-
-        if data_tokens.len() < expected {
-            return Err(Error::Parse(format!(
-                "ASCII grid {}: expected {expected} values, got {}",
-                path.display(),
-                data_tokens.len()
-            )));
-        }
+        let expected = width.checked_mul(height).ok_or_else(|| {
+            Error::Parse(format!(
+                "ASCII grid {}: dimensions overflow usize ({width}x{height})",
+                path.display()
+            ))
+        })?;
 
         let mut data = Vec::with_capacity(expected);
-        for tok in data_tokens.into_iter().take(expected) {
-            let val = match tok.parse::<T>() {
-                Ok(v) => v,
+        let parse_token = |tok: &str| -> Result<T> {
+            match tok.parse::<T>() {
+                Ok(v) => Ok(v),
                 Err(_) => {
                     let f = tok
                         .parse::<f64>()
                         .map_err(|e| Error::Parse(format!("invalid cell value '{tok}': {e}")))?;
-                    T::from_f64(f)
+                    Ok(T::from_nodata_f64(f))
                 }
-            };
-            data.push(val);
+            }
+        };
+
+        let mut push_line = |line: &str| -> Result<()> {
+            for tok in line.split_whitespace() {
+                if data.len() == expected {
+                    return Err(Error::Parse(format!(
+                        "ASCII grid {}: expected {expected} values, found extra token '{tok}'",
+                        path.display()
+                    )));
+                }
+                data.push(parse_token(tok)?);
+            }
+            Ok(())
+        };
+
+        if let Some(first_line) = first_data_line {
+            push_line(&first_line)?;
+        }
+        for line_res in lines {
+            let line = line_res?;
+            push_line(&line)?;
+        }
+
+        if data.len() != expected {
+            return Err(Error::Parse(format!(
+                "ASCII grid {}: expected {expected} values, got {}",
+                path.display(),
+                data.len()
+            )));
         }
 
         let cs_x = dx.or(cellsize).unwrap_or(1.0);
@@ -697,15 +844,23 @@ impl<T: DemNum> Array2D<T> {
 
         let mut arr = Self::from_vec(width, height, data)?;
         arr.geotransform = [origin_x, cs_x, 0.0, origin_y, 0.0, -cs_y];
-        if let Some(nd) = nodata {
-            arr.set_no_data(T::from_f64(nd));
-        }
+        arr.set_no_data(nodata.unwrap_or_else(T::esri_default_no_data));
         arr.filename = path.to_string_lossy().into_owned();
         Ok(arr)
     }
 
     /// Saves the raster as an ESRI ASCII Grid (`.asc`).
     pub fn save_ascii_grid(&self, path: impl AsRef<Path>) -> Result<()> {
+        if self.geotransform[2] != 0.0
+            || self.geotransform[4] != 0.0
+            || self.geotransform[1] <= 0.0
+            || self.geotransform[5] >= 0.0
+        {
+            return Err(Error::InvalidArgument(format!(
+                "ESRI ASCII Grid only supports north-up unrotated geotransforms, got {:?}",
+                self.geotransform
+            )));
+        }
         let file = File::create(path)?;
         let mut w = BufWriter::new(file);
         let cs_x = self.get_cell_length_x();

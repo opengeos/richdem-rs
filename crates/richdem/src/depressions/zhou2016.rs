@@ -41,6 +41,10 @@ impl<T: DemNum> PartialOrd for ZhouNode<T> {
     }
 }
 
+const LABEL_UNVISITED: u8 = 0;
+const LABEL_VISITED: u8 = 10;
+const LABEL_NODATA: u8 = 255;
+
 fn process_trace_que_onepass<T: DemNum>(
     dem: &Array2D<T>,
     labels: &mut Array2D<u8>,
@@ -56,7 +60,7 @@ fn process_trace_que_onepass<T: DemNum>(
             let Some(ni) = dem.n_to_i(c, D8X[n], D8Y[n]) else {
                 continue;
             };
-            if labels.get_i(ni) != 0 {
+            if labels.get_i(ni) != LABEL_UNVISITED {
                 continue;
             }
 
@@ -73,7 +77,9 @@ fn process_trace_que_onepass<T: DemNum>(
                     let Some(nni) = dem.n_to_i(ni, D8X[nn], D8Y[nn]) else {
                         continue;
                     };
-                    if labels.get_i(nni) != 0 && dem.get_i(nni).rd_cmp(ne) == Ordering::Less {
+                    if labels.get_i(nni) == LABEL_VISITED
+                        && dem.get_i(nni).rd_cmp(ne) == Ordering::Less
+                    {
                         is_boundary = false;
                         break;
                     }
@@ -100,7 +106,7 @@ fn process_pit_onepass<T: DemNum>(
             let Some(ni) = dem.n_to_i(c, D8X[n], D8Y[n]) else {
                 continue;
             };
-            if labels.get_i(ni) != 0 {
+            if labels.get_i(ni) != LABEL_UNVISITED {
                 continue;
             }
             labels.set_i(ni, cl);
@@ -124,51 +130,48 @@ pub fn priority_flood_zhou2016<T: DemNum>(dem: &mut Array2D<T>) {
 
     let mut trace_queue = VecDeque::<usize>::new();
     let mut depression_que = VecDeque::<usize>::new();
-    let mut labels = Array2D::<u8>::new(w, h, 0);
+    let mut labels = Array2D::<u8>::new(w, h, LABEL_UNVISITED);
     let mut priority_queue = BinaryHeap::<ZhouNode<T>>::new();
+    let nd = dem.no_data();
 
-    for x in 0..w {
-        let i = dem.xy_to_i(x, 0);
-        priority_queue.push(ZhouNode {
-            elev: dem.get_i(i),
-            idx: i,
-        });
-    }
-    if h > 1 {
+    // Mark all NoData cells so they are never modified or treated as terrain pits,
+    // and seed valid perimeter cells plus valid cells adjacent to NoData.
+    for y in 0..h {
         for x in 0..w {
-            let i = dem.xy_to_i(x, h - 1);
-            priority_queue.push(ZhouNode {
-                elev: dem.get_i(i),
-                idx: i,
-            });
-        }
-    }
-    for y in 1..h.saturating_sub(1) {
-        let i = dem.xy_to_i(0, y);
-        priority_queue.push(ZhouNode {
-            elev: dem.get_i(i),
-            idx: i,
-        });
-        if w > 1 {
-            let j = dem.xy_to_i(w - 1, y);
-            priority_queue.push(ZhouNode {
-                elev: dem.get_i(j),
-                idx: j,
-            });
+            let i = dem.xy_to_i(x, y);
+            let v = dem.get_i(i);
+            if v.rd_eq(nd) {
+                labels.set_i(i, LABEL_NODATA);
+                continue;
+            }
+            if dem.is_edge_cell(x, y) {
+                priority_queue.push(ZhouNode { elev: v, idx: i });
+                labels.set_i(i, LABEL_VISITED);
+                continue;
+            }
+            for n in 1..=8 {
+                let nx = x as i32 + D8X[n];
+                let ny = y as i32 + D8Y[n];
+                if dem.in_grid(nx, ny) && dem.get_xy(nx, ny).rd_eq(nd) {
+                    priority_queue.push(ZhouNode { elev: v, idx: i });
+                    labels.set_i(i, LABEL_VISITED);
+                    break;
+                }
+            }
         }
     }
 
     while let Some(c) = priority_queue.pop() {
-        labels.set_i(c.idx, 10);
+        labels.set_i(c.idx, LABEL_VISITED);
 
         for n in 1..=8 {
             let Some(ni) = dem.n_to_i(c.idx, D8X[n], D8Y[n]) else {
                 continue;
             };
-            if labels.get_i(ni) != 0 {
+            if labels.get_i(ni) != LABEL_UNVISITED {
                 continue;
             }
-            labels.set_i(ni, 10);
+            labels.set_i(ni, LABEL_VISITED);
 
             if dem.get_i(ni).rd_cmp(c.elev) != Ordering::Greater {
                 dem.set_i(ni, c.elev);

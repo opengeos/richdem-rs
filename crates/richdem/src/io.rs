@@ -77,6 +77,9 @@ pub fn load_raster_padded<T: DemNum>(
         T::ZERO,
     );
     out.copy_metadata_from(&inner);
+    let gt = inner.geotransform;
+    out.geotransform[0] = gt[0] - (pad_x as f64) * gt[1] - (pad_y as f64) * gt[2];
+    out.geotransform[3] = gt[3] - (pad_x as f64) * gt[4] - (pad_y as f64) * gt[5];
     out.set_no_data(inner.no_data());
     for y in 0..inner.height() {
         for x in 0..inner.width() {
@@ -97,11 +100,25 @@ pub fn save_raster<T: DemNum>(
     compress: bool,
 ) -> Result<()> {
     let path = path.as_ref();
-    let mut to_save = arr.clone();
+    let mut ds = array2d_to_dataset(arr)?;
     if let Some(op) = analysis {
-        to_save.add_processing_history(op);
+        let line = format!("richdem-rs {} | {op}", env!("CARGO_PKG_VERSION"));
+        if let Some((_, val)) = ds
+            .raster
+            .metadata
+            .iter_mut()
+            .find(|(k, _)| k == "PROCESSING_HISTORY")
+        {
+            if !val.is_empty() {
+                val.push('\n');
+            }
+            val.push_str(&line);
+        } else {
+            ds.raster
+                .metadata
+                .push(("PROCESSING_HISTORY".to_string(), line));
+        }
     }
-    let ds = array2d_to_dataset(&to_save)?;
     let mut opts = RasterWriteOptions::default();
     if compress {
         opts.compression = Some("DEFLATE".into());
@@ -135,7 +152,11 @@ pub fn save_dynamic(
 pub fn dataset_to_dynamic(ds: RasterDataset, filename: &str) -> Result<DynamicArray2D> {
     let width = ds.raster.cols;
     let height = ds.raster.rows;
-    let pixels = width * height;
+    let pixels = width.checked_mul(height).ok_or_else(|| {
+        Error::DimensionMismatch(format!(
+            "raster dimensions overflow usize ({width}x{height})"
+        ))
+    })?;
     let gt = ds.geo_transform();
     let proj = ds.crs().to_wkt().unwrap_or_default();
     let nodata_opt = ds.nodata();
@@ -157,7 +178,7 @@ pub fn dataset_to_dynamic(ds: RasterDataset, filename: &str) -> Result<DynamicAr
             arr.metadata = metadata;
             arr.filename = filename.to_string();
             if let Some(nd) = nodata_opt {
-                arr.set_no_data(<$ty as DemNum>::from_f64(nd));
+                arr.set_no_data(<$ty as DemNum>::from_nodata_f64(nd));
             }
             Ok(DynamicArray2D::$variant(arr))
         }};
@@ -182,35 +203,35 @@ pub fn array2d_to_dataset<T: DemNum>(arr: &Array2D<T>) -> Result<RasterDataset> 
     let (data_type, raster_data) = match T::type_name() {
         "uint8" => (
             DataType::U8,
-            RasterData::U8(arr.data().iter().map(|v| v.to_f64() as u8).collect()),
+            RasterData::U8(arr.data().iter().map(|v| v.to_u64() as u8).collect()),
         ),
         "int8" => (
             DataType::I8,
-            RasterData::I8(arr.data().iter().map(|v| v.to_f64() as i8).collect()),
+            RasterData::I8(arr.data().iter().map(|v| v.to_i64() as i8).collect()),
         ),
         "uint16" => (
             DataType::U16,
-            RasterData::U16(arr.data().iter().map(|v| v.to_f64() as u16).collect()),
+            RasterData::U16(arr.data().iter().map(|v| v.to_u64() as u16).collect()),
         ),
         "int16" => (
             DataType::I16,
-            RasterData::I16(arr.data().iter().map(|v| v.to_f64() as i16).collect()),
+            RasterData::I16(arr.data().iter().map(|v| v.to_i64() as i16).collect()),
         ),
         "uint32" => (
             DataType::U32,
-            RasterData::U32(arr.data().iter().map(|v| v.to_f64() as u32).collect()),
+            RasterData::U32(arr.data().iter().map(|v| v.to_u64() as u32).collect()),
         ),
         "int32" => (
             DataType::I32,
-            RasterData::I32(arr.data().iter().map(|v| v.to_f64() as i32).collect()),
+            RasterData::I32(arr.data().iter().map(|v| v.to_i64() as i32).collect()),
         ),
         "uint64" => (
             DataType::U64,
-            RasterData::U64(arr.data().iter().map(|v| v.to_f64() as u64).collect()),
+            RasterData::U64(arr.data().iter().map(|v| v.to_u64()).collect()),
         ),
         "int64" => (
             DataType::I64,
-            RasterData::I64(arr.data().iter().map(|v| v.to_f64() as i64).collect()),
+            RasterData::I64(arr.data().iter().map(|v| v.to_i64()).collect()),
         ),
         "float32" => (
             DataType::F32,
@@ -240,9 +261,10 @@ pub fn array2d_to_dataset<T: DemNum>(arr: &Array2D<T>) -> Result<RasterDataset> 
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
 
-    if !arr.projection.is_empty()
-        && let Ok(sref) = SpatialRef::parse(&arr.projection)
-    {
+    if !arr.projection.is_empty() {
+        let sref = SpatialRef::parse(&arr.projection).map_err(|e| {
+            Error::InvalidArgument(format!("invalid projection '{}': {e}", arr.projection))
+        })?;
         raster.crs = sref.to_crs_info();
     }
 

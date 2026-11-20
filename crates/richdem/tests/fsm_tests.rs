@@ -7,9 +7,17 @@ use rand::{Rng, SeedableRng};
 use richdem::*;
 
 fn max_array_diff(a: &Array2D<f64>, b: &Array2D<f64>) -> f64 {
+    assert_eq!(a.width(), b.width());
+    assert_eq!(a.height(), b.height());
     let mut max_diff = 0.0f64;
     for i in 0..a.size() {
-        max_diff = max_diff.max((a.get_i(i) - b.get_i(i)).abs());
+        let av = a.get_i(i);
+        let bv = b.get_i(i);
+        assert!(
+            av.is_finite() && bv.is_finite(),
+            "non-finite value at cell {i}: {av} vs {bv}"
+        );
+        max_diff = max_diff.max((av - bv).abs());
     }
     max_diff
 }
@@ -304,14 +312,15 @@ fn test_randomized_heavy_flooding_vs_priority_flood() {
         let mut wtd = Array2D::<f64>::new(dem.width(), dem.height(), 100.0);
         fill_spill_merge(&dem, &labels, &flowdirs, &mut deps, &mut wtd).unwrap();
 
+        let mut comparison = dem.clone();
+        priority_flood_zhou2016(&mut comparison);
+
         for i in 0..dem.size() {
             if !dem.is_no_data_i(i) {
                 let v = dem.get_i(i) + wtd.get_i(i);
                 dem.set_i(i, v);
             }
         }
-        let mut comparison = dem.clone();
-        priority_flood_zhou2016(&mut comparison);
         assert!(max_array_diff(&comparison, &dem) < 1e-6);
     }
 }

@@ -99,6 +99,10 @@ pub const ACCUM_NO_DATA: i32 = -1;
 /// Value indicating that a D-infinity flow direction or upslope area cell is NoData.
 pub const DINF_NO_DATA: f32 = -1.0;
 
+/// Value indicating that a D-infinity flow direction cell has no defined flow (flat or pit).
+/// Distinct from `0.0` (which represents eastward flow in radians) and [`DINF_NO_DATA`].
+pub const DINF_NO_FLOW: f32 = -2.0;
+
 /// Grid connectivity topology (8-neighbor or 4-neighbor).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Topology {

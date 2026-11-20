@@ -44,7 +44,7 @@ impl From<CliTopology> for Topology {
     }
 }
 
-#[derive(Clone, Copy, ValueEnum)]
+#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum CliBreachMode {
     Complete,
     Selective,
@@ -237,9 +237,12 @@ enum Commands {
     Geotransform {
         /// Input raster
         input: PathBuf,
-        /// Optional output raster (required when setting geotransform)
+        /// Output raster (required when setting geotransform unless --in-place is passed)
         #[arg(short = 'o', long)]
         output: Option<PathBuf>,
+        /// Overwrite input raster in place when modifying metadata
+        #[arg(long)]
+        in_place: bool,
         /// Set 6 geotransform values
         #[arg(long, num_args = 6, allow_hyphen_values = true)]
         set: Option<Vec<f64>>,
@@ -248,20 +251,26 @@ enum Commands {
     NoData {
         /// Input raster
         input: PathBuf,
-        /// Optional output raster (required when setting NoData)
+        /// Output raster (required when setting NoData unless --in-place is passed)
         #[arg(short = 'o', long)]
         output: Option<PathBuf>,
+        /// Overwrite input raster in place when modifying metadata
+        #[arg(long)]
+        in_place: bool,
         /// New NoData value
         #[arg(long, allow_hyphen_values = true)]
-        set: Option<f64>,
+        set: Option<String>,
     },
     /// Display or set a raster's projection CRS (rd_projection)
     Projection {
         /// Input raster
         input: PathBuf,
-        /// Optional output raster (required when setting projection)
+        /// Output raster (required when setting projection unless --in-place is passed)
         #[arg(short = 'o', long)]
         output: Option<PathBuf>,
+        /// Overwrite input raster in place when modifying metadata
+        #[arg(long)]
+        in_place: bool,
         /// Projection string (EPSG:xxxx, WKT, or PROJ)
         #[arg(long)]
         set: Option<String>,
@@ -378,10 +387,16 @@ fn run() -> richdem::Result<()> {
             topology,
             compress,
         } => {
+            let topo: Topology = topology.into();
+            if topo == Topology::D4 && (gradient || mode != CliBreachMode::Complete) {
+                return Err(richdem::Error::InvalidArgument(
+                    "D4 topology is only supported for complete breaching without --gradient; use --topology d8 for gradient, selective, or constrained breaching".into(),
+                ));
+            }
             let mut dem = load_raster::<f64>(&input, None)?;
             match mode {
                 CliBreachMode::Complete if !gradient => {
-                    breach_depressions(&mut dem, topology.into());
+                    breach_depressions(&mut dem, topo);
                 }
                 CliBreachMode::Complete => {
                     lindsay2016(
@@ -608,16 +623,29 @@ fn run() -> richdem::Result<()> {
             let mut sum_abs = 0.0f64;
             let mut sum_sq = 0.0f64;
             let mut count = 0usize;
+            let mut validity_mismatch = 0usize;
             for i in 0..fa.size() {
-                let d = (fa.get_i(i) - fb.get_i(i)).abs();
-                if d.is_nan() {
-                    continue;
+                let va = fa.get_i(i);
+                let vb = fb.get_i(i);
+                let a_missing = fa.is_no_data_i(i) || va.is_nan();
+                let b_missing = fb.is_no_data_i(i) || vb.is_nan();
+                match (a_missing, b_missing) {
+                    (true, true) => continue,
+                    (true, false) | (false, true) => {
+                        validity_mismatch += 1;
+                        continue;
+                    }
+                    (false, false) => {}
                 }
+                let d = (va - vb).abs();
                 max_diff = max_diff.max(d);
                 min_diff = min_diff.min(d);
                 sum_abs += d;
                 sum_sq += d * d;
                 count += 1;
+            }
+            if count == 0 {
+                min_diff = 0.0;
             }
             let avg = if count > 0 {
                 sum_abs / count as f64
@@ -629,15 +657,32 @@ fn run() -> richdem::Result<()> {
             } else {
                 0.0
             };
+            if validity_mismatch > 0 {
+                println!("Validity mismatch cells: {validity_mismatch}");
+            }
             println!("Absolute Max difference: {max_diff:10.6}");
             println!("Absolute Min difference: {min_diff:10.6}");
             println!("Absolute Avg difference: {avg:10.6}");
             println!("RMS difference:          {rms:10.6}");
         }
 
-        Commands::Geotransform { input, output, set } => {
+        Commands::Geotransform {
+            input,
+            output,
+            in_place,
+            set,
+        } => {
             let mut arr = load_dynamic(&input)?;
             if let Some(vals) = set {
+                let out = match (output, in_place) {
+                    (Some(p), _) => p,
+                    (None, true) => input,
+                    (None, false) => {
+                        return Err(richdem::Error::InvalidArgument(
+                            "setting geotransform requires --output <PATH> or --in-place".into(),
+                        ));
+                    }
+                };
                 let gt: [f64; 6] = vals.try_into().map_err(|_| {
                     richdem::Error::InvalidArgument("expected 6 geotransform values".into())
                 })?;
@@ -653,29 +698,77 @@ fn run() -> richdem::Result<()> {
                     DynamicArray2D::F32(a) => a.geotransform = gt,
                     DynamicArray2D::F64(a) => a.geotransform = gt,
                 }
-                let out = output.unwrap_or(input);
                 save_dynamic(&arr, &out, Some(&cmdline), false)?;
             } else {
                 println!("{:?}", arr.geotransform());
             }
         }
 
-        Commands::NoData { input, output, set } => {
+        Commands::NoData {
+            input,
+            output,
+            in_place,
+            set,
+        } => {
             let mut arr = load_dynamic(&input)?;
-            if let Some(nd) = set {
-                match &mut arr {
-                    DynamicArray2D::U8(a) => a.set_no_data(nd as u8),
-                    DynamicArray2D::I8(a) => a.set_no_data(nd as i8),
-                    DynamicArray2D::U16(a) => a.set_no_data(nd as u16),
-                    DynamicArray2D::I16(a) => a.set_no_data(nd as i16),
-                    DynamicArray2D::U32(a) => a.set_no_data(nd as u32),
-                    DynamicArray2D::I32(a) => a.set_no_data(nd as i32),
-                    DynamicArray2D::U64(a) => a.set_no_data(nd as u64),
-                    DynamicArray2D::I64(a) => a.set_no_data(nd as i64),
-                    DynamicArray2D::F32(a) => a.set_no_data(nd as f32),
-                    DynamicArray2D::F64(a) => a.set_no_data(nd),
+            if let Some(nd_str) = set {
+                let out = match (output, in_place) {
+                    (Some(p), _) => p,
+                    (None, true) => input,
+                    (None, false) => {
+                        return Err(richdem::Error::InvalidArgument(
+                            "setting NoData requires --output <PATH> or --in-place".into(),
+                        ));
+                    }
+                };
+                fn parse_int_nodata<T: std::str::FromStr>(s: &str, name: &str) -> richdem::Result<T>
+                where
+                    T::Err: std::fmt::Display,
+                {
+                    s.trim().parse::<T>().map_err(|e| {
+                        richdem::Error::InvalidArgument(format!(
+                            "NoData value '{s}' is not representable as {name}: {e}"
+                        ))
+                    })
                 }
-                let out = output.unwrap_or(input);
+                match &mut arr {
+                    DynamicArray2D::U8(a) => a.set_no_data(parse_int_nodata::<u8>(&nd_str, "u8")?),
+                    DynamicArray2D::I8(a) => a.set_no_data(parse_int_nodata::<i8>(&nd_str, "i8")?),
+                    DynamicArray2D::U16(a) => {
+                        a.set_no_data(parse_int_nodata::<u16>(&nd_str, "u16")?)
+                    }
+                    DynamicArray2D::I16(a) => {
+                        a.set_no_data(parse_int_nodata::<i16>(&nd_str, "i16")?)
+                    }
+                    DynamicArray2D::U32(a) => {
+                        a.set_no_data(parse_int_nodata::<u32>(&nd_str, "u32")?)
+                    }
+                    DynamicArray2D::I32(a) => {
+                        a.set_no_data(parse_int_nodata::<i32>(&nd_str, "i32")?)
+                    }
+                    DynamicArray2D::U64(a) => {
+                        a.set_no_data(parse_int_nodata::<u64>(&nd_str, "u64")?)
+                    }
+                    DynamicArray2D::I64(a) => {
+                        a.set_no_data(parse_int_nodata::<i64>(&nd_str, "i64")?)
+                    }
+                    DynamicArray2D::F32(a) => {
+                        let v: f32 = nd_str.trim().parse().map_err(|e| {
+                            richdem::Error::InvalidArgument(format!(
+                                "invalid f32 NoData '{nd_str}': {e}"
+                            ))
+                        })?;
+                        a.set_no_data(v);
+                    }
+                    DynamicArray2D::F64(a) => {
+                        let v: f64 = nd_str.trim().parse().map_err(|e| {
+                            richdem::Error::InvalidArgument(format!(
+                                "invalid f64 NoData '{nd_str}': {e}"
+                            ))
+                        })?;
+                        a.set_no_data(v);
+                    }
+                }
                 save_dynamic(&arr, &out, Some(&cmdline), false)?;
             } else {
                 println!("{}", arr.no_data_f64());
@@ -685,6 +778,7 @@ fn run() -> richdem::Result<()> {
         Commands::Projection {
             input,
             output,
+            in_place,
             set,
             from,
         } => {
@@ -696,6 +790,15 @@ fn run() -> richdem::Result<()> {
                 set
             };
             if let Some(p) = new_proj {
+                let out = match (output, in_place) {
+                    (Some(path), _) => path,
+                    (None, true) => input,
+                    (None, false) => {
+                        return Err(richdem::Error::InvalidArgument(
+                            "setting projection requires --output <PATH> or --in-place".into(),
+                        ));
+                    }
+                };
                 match &mut arr {
                     DynamicArray2D::U8(a) => a.projection = p,
                     DynamicArray2D::I8(a) => a.projection = p,
@@ -708,7 +811,6 @@ fn run() -> richdem::Result<()> {
                     DynamicArray2D::F32(a) => a.projection = p,
                     DynamicArray2D::F64(a) => a.projection = p,
                 }
-                let out = output.unwrap_or(input);
                 save_dynamic(&arr, &out, Some(&cmdline), false)?;
             } else {
                 println!("{}", arr.projection());

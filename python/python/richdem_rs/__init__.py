@@ -36,7 +36,9 @@ def _RichDEMVersion() -> str:
 def _AddAnalysis(rda: rdarray | rd3array, analysis: str) -> None:
     if not isinstance(rda, (rdarray, rd3array)):
         raise TypeError("An rdarray or rd3array is required!")
-    nowdate = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S.%f UTC")
+    nowdate = datetime.datetime.now(datetime.timezone.utc).strftime(
+        "%Y-%m-%d %H:%M:%S.%f UTC"
+    )
     metastr = f"\n{nowdate} | {_RichDEMVersion()} | {analysis}"
     if rda.metadata is None:
         rda.metadata = {}
@@ -153,12 +155,33 @@ def SaveGDAL(filename: str, rda: rdarray, compress: bool = False) -> None:
     """Save an `rdarray` to GeoTIFF/COG/ASCII/etc. using pure-Rust `terrio`."""
     if not isinstance(rda, rdarray):
         raise TypeError("A richdem_rs.rdarray is required!")
-    data = np.ascontiguousarray(rda, dtype=np.float64)
+    supported_dtypes = (
+        np.uint8,
+        np.int8,
+        np.uint16,
+        np.int16,
+        np.uint32,
+        np.int32,
+        np.uint64,
+        np.int64,
+        np.float32,
+        np.float64,
+    )
+    if rda.dtype.type in supported_dtypes:
+        data = np.ascontiguousarray(rda)
+        nd = (
+            int(rda.no_data)
+            if np.issubdtype(rda.dtype, np.integer)
+            else float(rda.no_data)
+        )
+    else:
+        data = np.ascontiguousarray(rda, dtype=np.float64)
+        nd = float(rda.no_data)
     meta = {str(k): str(v) for k, v in (rda.metadata or {}).items()}
     _richdem_rs.save_raster_terrio(
         str(filename),
         data,
-        float(rda.no_data),
+        nd,
         _gt_list(rda.geotransform),
         str(rda.projection or ""),
         meta,
@@ -175,10 +198,20 @@ def FillDepressions(
     """Fills all depressions in a DEM."""
     if not isinstance(dem, rdarray):
         raise TypeError("A richdem_rs.rdarray is required!")
-    data = np.ascontiguousarray(dem, dtype=np.float64)
-    filled = _richdem_rs.fill_depressions_f64(
-        data, float(dem.no_data), bool(epsilon), topology
-    )
+    if epsilon and not np.issubdtype(dem.dtype, np.floating):
+        raise TypeError(
+            "FillDepressions(epsilon=True) requires a floating-point DEM dtype"
+        )
+    if epsilon and dem.dtype == np.float32:
+        data = np.ascontiguousarray(dem, dtype=np.float32)
+        filled = _richdem_rs.fill_depressions_f32(
+            data, float(dem.no_data), True, topology
+        )
+    else:
+        data = np.ascontiguousarray(dem, dtype=np.float64)
+        filled = _richdem_rs.fill_depressions_f64(
+            data, float(dem.no_data), bool(epsilon), topology
+        )
     if in_place:
         dem[...] = filled.astype(dem.dtype, copy=False)
         _AddAnalysis(dem, f"FillDepressions(dem, epsilon={epsilon})")
@@ -215,8 +248,14 @@ def ResolveFlats(dem: rdarray, in_place: bool = False) -> rdarray | None:
     """Resolves flat surfaces by imposing a local epsilon gradient (Barnes 2014)."""
     if not isinstance(dem, rdarray):
         raise TypeError("A richdem_rs.rdarray is required!")
-    data = np.ascontiguousarray(dem, dtype=np.float64)
-    resolved = _richdem_rs.resolve_flats_f64(data, float(dem.no_data))
+    if not np.issubdtype(dem.dtype, np.floating):
+        raise TypeError("ResolveFlats requires a floating-point DEM dtype")
+    if dem.dtype == np.float32:
+        data = np.ascontiguousarray(dem, dtype=np.float32)
+        resolved = _richdem_rs.resolve_flats_f32(data, float(dem.no_data))
+    else:
+        data = np.ascontiguousarray(dem, dtype=np.float64)
+        resolved = _richdem_rs.resolve_flats_f64(data, float(dem.no_data))
     if in_place:
         dem[...] = resolved.astype(dem.dtype, copy=False)
         _AddAnalysis(dem, f"ResolveFlats(dem, in_place={in_place})")
@@ -251,6 +290,14 @@ def FlowAccumFromProps(
     """Calculates flow accumulation from 3D flow proportions."""
     if not isinstance(props, rd3array):
         raise TypeError("A richdem_rs.rd3array is required!")
+    if (
+        weights is not None
+        and in_place
+        and not np.issubdtype(weights.dtype, np.floating)
+    ):
+        raise TypeError(
+            "FlowAccumFromProps(in_place=True) requires floating-point weights"
+        )
     w_arr = (
         np.ascontiguousarray(weights, dtype=np.float64) if weights is not None else None
     )
@@ -259,6 +306,7 @@ def FlowAccumFromProps(
     )
     if weights is not None and in_place:
         weights[...] = accum_np
+        weights.no_data = -1
         _AddAnalysis(
             weights, f"FlowAccumFromProps(props, weights=weights, in_place={in_place})"
         )
@@ -281,6 +329,14 @@ def FlowAccumulation(
     """Calculates flow accumulation using any RichDEM flow routing method."""
     if not isinstance(dem, rdarray):
         raise TypeError("A richdem_rs.rdarray is required!")
+    if (
+        weights is not None
+        and in_place
+        and not np.issubdtype(weights.dtype, np.floating)
+    ):
+        raise TypeError(
+            "FlowAccumulation(in_place=True) requires floating-point weights"
+        )
     data = np.ascontiguousarray(dem, dtype=np.float64)
     w_arr = (
         np.ascontiguousarray(weights, dtype=np.float64) if weights is not None else None
@@ -290,6 +346,7 @@ def FlowAccumulation(
     )
     if weights is not None and in_place:
         weights[...] = accum_np
+        weights.no_data = -1
         _AddAnalysis(
             weights,
             f"FlowAccumulation(dem, method={method}, exponent={exponent}, in_place=True)",
@@ -351,7 +408,11 @@ def get_depression_hierarchy(
         dem_f64, labels, topology
     )
     flowdirs = rdarray(
-        fds, no_data=-9999, geotransform=dem.geotransform or STANDARD_GEOTRANSFORM
+        fds,
+        no_data=-9999,
+        geotransform=(
+            dem.geotransform if dem.geotransform is not None else STANDARD_GEOTRANSFORM
+        ),
     )
     return dh, flowdirs
 
@@ -382,18 +443,22 @@ def flow_accumulation_from_d8(d8: rdarray) -> rdarray:
     arr = np.ascontiguousarray(d8, dtype=np.int32)
     nd = int(d8.no_data) if isinstance(d8, rdarray) else -1
     out = _richdem_rs.flow_accumulation_from_d8_py(arr, nd)
-    return rdarray(out, meta_obj=d8 if isinstance(d8, rdarray) else None, no_data=-1)
+    return rdarray(
+        out,
+        meta_obj=d8 if isinstance(d8, rdarray) else None,
+        no_data=int(np.iinfo(np.uint32).max),
+    )
 
 
 def convert_arc_flowdirs_to_richdem_d8(arc_flowdirs: rdarray) -> rdarray:
     """Converts ArcGIS D8 flow directions to RichDEM D8 flow directions."""
     arr = np.ascontiguousarray(arc_flowdirs, dtype=np.uint8)
-    out = _richdem_rs.convert_arc_flowdirs_py(arr)
-    nd = arc_flowdirs.no_data if isinstance(arc_flowdirs, rdarray) else 255
+    in_nd = int(arc_flowdirs.no_data) if isinstance(arc_flowdirs, rdarray) else 255
+    out, out_nd = _richdem_rs.convert_arc_flowdirs_py(arr, in_nd)
     return rdarray(
         out,
         meta_obj=arc_flowdirs if isinstance(arc_flowdirs, rdarray) else None,
-        no_data=nd,
+        no_data=int(out_nd),
     )
 
 

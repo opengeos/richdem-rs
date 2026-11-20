@@ -29,19 +29,32 @@ pub fn flow_accumulation<A: DemNum>(props: &Array3D<f32>, accum: &mut Array2D<A>
     let n_offsets: [isize; 9] = [0, -1, -1 - wi, -wi, 1 - wi, 1, 1 + wi, wi, -1 + wi];
     let p_data = props.data();
     let p_nd = props.no_data();
+    let wi32 = w as i32;
+    let hi32 = h as i32;
 
-    for y in 1..h.saturating_sub(1) {
+    for y in 0..h {
         let row_base = y * w;
-        for x in 1..w.saturating_sub(1) {
+        let y_interior = y > 0 && y + 1 < h;
+        for x in 0..w {
             let ci = row_base + x;
             let p_base = ci * 9;
             if p_data[p_base].rd_eq(p_nd) {
                 continue;
             }
             let p_cell = &p_data[p_base..p_base + 9];
+            let interior = y_interior && x > 0 && x + 1 < w;
             for n in 1..=8 {
                 if p_cell[n] > 0.0 {
-                    let ni = ci.wrapping_add_signed(n_offsets[n]);
+                    let ni = if interior {
+                        ci.wrapping_add_signed(n_offsets[n])
+                    } else {
+                        let nx = x as i32 + D8X[n];
+                        let ny = y as i32 + D8Y[n];
+                        if nx < 0 || ny < 0 || nx >= wi32 || ny >= hi32 {
+                            continue;
+                        }
+                        (ny as usize) * w + (nx as usize)
+                    };
                     deps[ni] += 1;
                 }
             }
@@ -60,8 +73,6 @@ pub fn flow_accumulation<A: DemNum>(props: &Array3D<f32>, accum: &mut Array2D<A>
     }
 
     let accum_data = accum.data_mut();
-    let wi32 = w as i32;
-    let hi32 = h as i32;
 
     while let Some((cx, cy)) = q.pop_front() {
         let ci = (cy as usize) * w + (cx as usize);

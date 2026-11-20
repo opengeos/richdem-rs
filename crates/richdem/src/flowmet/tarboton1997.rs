@@ -105,8 +105,8 @@ pub fn fm_tarboton<T: DemNum>(elevations: &Array2D<T>) -> Array3D<f32> {
                 props.set(x, y, nwrap(nmax + 1), 1.0);
             } else {
                 let p = (rmax as f64 / (PI / 4.0)) as f32;
-                props.set(x, y, nmax, p);
-                props.set(x, y, nwrap(nmax + 1), 1.0 - p);
+                props.set(x, y, nmax, 1.0 - p);
+                props.set(x, y, nwrap(nmax + 1), p);
             }
         }
     }

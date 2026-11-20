@@ -108,13 +108,14 @@ fn terrain_curvature_setup<T: DemNum>(
     zscale: f32,
 ) -> CurveVars {
     let tsv = terrain_setup(elevations, x, y, zscale);
-    let l = elevations.get_cell_length_x();
+    let dx = elevations.get_cell_length_x();
+    let dy = elevations.get_cell_length_y();
     CurveVars {
-        d: ((tsv.d + tsv.f) / 2.0 - tsv.e) / l / l,
-        e: ((tsv.b + tsv.h) / 2.0 - tsv.e) / l / l,
-        f: (-tsv.a + tsv.c + tsv.g - tsv.i) / 4.0 / l / l,
-        g: (-tsv.d + tsv.f) / 2.0 / l,
-        h: (tsv.b - tsv.h) / 2.0 / l,
+        d: ((tsv.d + tsv.f) / 2.0 - tsv.e) / (dx * dx),
+        e: ((tsv.b + tsv.h) / 2.0 - tsv.e) / (dy * dy),
+        f: (-tsv.a + tsv.c + tsv.g - tsv.i) / (4.0 * dx * dy),
+        g: (-tsv.d + tsv.f) / (2.0 * dx),
+        h: (tsv.b - tsv.h) / (2.0 * dy),
     }
 }
 

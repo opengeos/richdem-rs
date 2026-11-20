@@ -12,7 +12,11 @@ pub const FLOW_PROPS_DEPTH: usize = 9;
 
 /// A `(height, width, 9)` row-major 3D array used for generic flow proportions.
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(try_from = "Array3DWire<T>")
+)]
 pub struct Array3D<T: DemNum> {
     width: usize,
     height: usize,
@@ -24,6 +28,32 @@ pub struct Array3D<T: DemNum> {
     pub projection: String,
     /// Raster metadata tags.
     pub metadata: BTreeMap<String, String>,
+}
+
+#[cfg(feature = "serde")]
+#[derive(serde::Deserialize)]
+struct Array3DWire<T> {
+    width: usize,
+    height: usize,
+    data: Vec<T>,
+    no_data: T,
+    geotransform: [f64; 6],
+    projection: String,
+    metadata: BTreeMap<String, String>,
+}
+
+#[cfg(feature = "serde")]
+impl<T: DemNum> TryFrom<Array3DWire<T>> for Array3D<T> {
+    type Error = Error;
+
+    fn try_from(w: Array3DWire<T>) -> Result<Self> {
+        let mut arr = Array3D::from_vec(w.width, w.height, w.data)?;
+        arr.no_data = w.no_data;
+        arr.geotransform = w.geotransform;
+        arr.projection = w.projection;
+        arr.metadata = w.metadata;
+        Ok(arr)
+    }
 }
 
 impl<T: DemNum> Default for Array3D<T> {
@@ -43,10 +73,14 @@ impl<T: DemNum> Default for Array3D<T> {
 impl<T: DemNum> Array3D<T> {
     /// Creates a `width x height x 9` array filled with `fill`.
     pub fn new(width: usize, height: usize, fill: T) -> Self {
+        let total = width
+            .checked_mul(height)
+            .and_then(|c| c.checked_mul(FLOW_PROPS_DEPTH))
+            .expect("Array3D dimensions overflow usize");
         Self {
             width,
             height,
-            data: vec![fill; width * height * FLOW_PROPS_DEPTH],
+            data: vec![fill; total],
             no_data: T::ZERO,
             geotransform: STANDARD_GEOTRANSFORM,
             projection: String::new(),
@@ -56,10 +90,15 @@ impl<T: DemNum> Array3D<T> {
 
     /// Creates a `width x height x 9` array matching `template`'s dimensions and metadata.
     pub fn make_from_template<U: DemNum>(template: &Array2D<U>, fill: T) -> Self {
+        let total = template
+            .width()
+            .checked_mul(template.height())
+            .and_then(|c| c.checked_mul(FLOW_PROPS_DEPTH))
+            .expect("Array3D dimensions overflow usize");
         Self {
             width: template.width(),
             height: template.height(),
-            data: vec![fill; template.width() * template.height() * FLOW_PROPS_DEPTH],
+            data: vec![fill; total],
             no_data: T::ZERO,
             geotransform: template.geotransform,
             projection: template.projection.clone(),
@@ -69,7 +108,14 @@ impl<T: DemNum> Array3D<T> {
 
     /// Creates an `Array3D` from a flat buffer of length `width * height * 9`.
     pub fn from_vec(width: usize, height: usize, data: Vec<T>) -> Result<Self> {
-        let expected = width * height * FLOW_PROPS_DEPTH;
+        let expected = width
+            .checked_mul(height)
+            .and_then(|c| c.checked_mul(FLOW_PROPS_DEPTH))
+            .ok_or_else(|| {
+                Error::DimensionMismatch(format!(
+                    "Array3D dimensions overflow usize ({width}x{height}x{FLOW_PROPS_DEPTH})"
+                ))
+            })?;
         if data.len() != expected {
             return Err(Error::DimensionMismatch(format!(
                 "expected {expected} elements ({width}x{height}x9), got {}",

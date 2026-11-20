@@ -49,3 +49,6 @@ manifest-path = "Cargo.toml"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"

@@ -291,7 +291,7 @@ pub fn flow_accumulation_from_d8<T: DemNum>(d8_in: &Array2D<T>) -> Array2D<u32> 
         }
     }
 
-    let nd = d8_in.no_data().to_i64() as u32;
+    let nd = accum.no_data();
     for i in 0..d8_in.size() {
         if d8_in.is_no_data_i(i) {
             accum.set_i(i, nd);

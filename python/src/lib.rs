@@ -32,20 +32,28 @@ fn parse_topology(topo: &str) -> PyResult<Topology> {
     }
 }
 
-fn from_py_array2_f64(
-    arr: PyReadonlyArray2<'_, f64>,
-    no_data: f64,
+fn from_py_array2<T: richdem::DemNum + numpy::Element>(
+    arr: PyReadonlyArray2<'_, T>,
+    no_data: T,
     geotransform: Option<[f64; 6]>,
-) -> PyResult<Array2D<f64>> {
+) -> PyResult<Array2D<T>> {
     let view = arr.as_array();
     let (h, w) = (view.nrows(), view.ncols());
-    let data: Vec<f64> = view.iter().copied().collect();
+    let data: Vec<T> = view.iter().copied().collect();
     let mut rd = Array2D::from_vec(w, h, data).map_err(to_py_err)?;
     rd.set_no_data(no_data);
     if let Some(gt) = geotransform {
         rd.geotransform = gt;
     }
     Ok(rd)
+}
+
+fn from_py_array2_f64(
+    arr: PyReadonlyArray2<'_, f64>,
+    no_data: f64,
+    geotransform: Option<[f64; 6]>,
+) -> PyResult<Array2D<f64>> {
+    from_py_array2(arr, no_data, geotransform)
 }
 
 fn to_py_array2<'py, T: richdem::DemNum + numpy::Element>(
@@ -101,6 +109,7 @@ pub struct PyDepression {
     pub water_vol: f64,
     #[pyo3(get, set)]
     pub total_elevation: f64,
+    topology: Topology,
 }
 
 #[pymethods]
@@ -130,6 +139,7 @@ impl From<Depression<f64>> for PyDepression {
             dep_vol: d.dep_vol,
             water_vol: d.water_vol,
             total_elevation: d.total_elevation,
+            topology: d.topology,
         }
     }
 }
@@ -153,6 +163,7 @@ impl From<&PyDepression> for Depression<f64> {
             dep_vol: d.dep_vol,
             water_vol: d.water_vol,
             total_elevation: d.total_elevation,
+            topology: d.topology,
         }
     }
 }
@@ -188,17 +199,45 @@ fn load_raster_terrio<'py>(
 #[pyo3(signature = (filename, data, no_data, geotransform, projection, metadata, compress=false))]
 fn save_raster_terrio(
     filename: &str,
-    data: PyReadonlyArray2<'_, f64>,
-    no_data: f64,
+    data: &Bound<'_, PyAny>,
+    no_data: &Bound<'_, PyAny>,
     geotransform: [f64; 6],
     projection: &str,
     metadata: BTreeMap<String, String>,
     compress: bool,
 ) -> PyResult<()> {
-    let mut rd = from_py_array2_f64(data, no_data, Some(geotransform))?;
-    rd.projection = projection.to_string();
-    rd.metadata = metadata;
-    save_raster(&rd, filename, None, compress).map_err(to_py_err)
+    macro_rules! try_save {
+        ($ty:ty) => {
+            if let Ok(arr) = data.extract::<PyReadonlyArray2<'_, $ty>>() {
+                let nd: $ty = match no_data.extract::<$ty>() {
+                    Ok(v) => v,
+                    Err(_) => {
+                        let f = no_data.extract::<f64>()?;
+                        <$ty as richdem::DemNum>::from_nodata_f64(f)
+                    }
+                };
+                let mut rd = from_py_array2::<$ty>(arr, nd, Some(geotransform))?;
+                rd.projection = projection.to_string();
+                rd.metadata = metadata;
+                return save_raster(&rd, filename, None, compress).map_err(to_py_err);
+            }
+        };
+    }
+
+    try_save!(f64);
+    try_save!(f32);
+    try_save!(u8);
+    try_save!(i8);
+    try_save!(u16);
+    try_save!(i16);
+    try_save!(u32);
+    try_save!(i32);
+    try_save!(u64);
+    try_save!(i64);
+
+    Err(PyValueError::new_err(
+        "Unsupported array dtype for SaveGDAL; expected a 2D array of u8/i8/u16/i16/u32/i32/u64/i64/f32/f64",
+    ))
 }
 
 #[pyfunction]
@@ -211,6 +250,24 @@ fn fill_depressions_f64<'py>(
 ) -> PyResult<Bound<'py, PyArray2<f64>>> {
     let topo = parse_topology(topology)?;
     let mut rd = from_py_array2_f64(dem, no_data, None)?;
+    if epsilon {
+        fill_depressions_epsilon(&mut rd, topo).map_err(to_py_err)?;
+    } else {
+        fill_depressions(&mut rd, topo);
+    }
+    to_py_array2(py, rd)
+}
+
+#[pyfunction]
+fn fill_depressions_f32<'py>(
+    py: Python<'py>,
+    dem: PyReadonlyArray2<'_, f32>,
+    no_data: f32,
+    epsilon: bool,
+    topology: &str,
+) -> PyResult<Bound<'py, PyArray2<f32>>> {
+    let topo = parse_topology(topology)?;
+    let mut rd = from_py_array2::<f32>(dem, no_data, None)?;
     if epsilon {
         fill_depressions_epsilon(&mut rd, topo).map_err(to_py_err)?;
     } else {
@@ -239,6 +296,17 @@ fn resolve_flats_f64<'py>(
     no_data: f64,
 ) -> PyResult<Bound<'py, PyArray2<f64>>> {
     let mut rd = from_py_array2_f64(dem, no_data, None)?;
+    resolve_flats_epsilon(&mut rd).map_err(to_py_err)?;
+    to_py_array2(py, rd)
+}
+
+#[pyfunction]
+fn resolve_flats_f32<'py>(
+    py: Python<'py>,
+    dem: PyReadonlyArray2<'_, f32>,
+    no_data: f32,
+) -> PyResult<Bound<'py, PyArray2<f32>>> {
+    let mut rd = from_py_array2::<f32>(dem, no_data, None)?;
     resolve_flats_epsilon(&mut rd).map_err(to_py_err)?;
     to_py_array2(py, rd)
 }
@@ -366,15 +434,19 @@ fn d8_flow_directions_py<'py>(
 }
 
 #[pyfunction]
+#[pyo3(signature = (arc, no_data=255))]
 fn convert_arc_flowdirs_py<'py>(
     py: Python<'py>,
     arc: PyReadonlyArray2<'_, u8>,
-) -> PyResult<Bound<'py, PyArray2<u8>>> {
+    no_data: u8,
+) -> PyResult<(Bound<'py, PyArray2<u8>>, u8)> {
     let view = arc.as_array();
     let (h, w) = (view.nrows(), view.ncols());
-    let rd = Array2D::from_vec(w, h, view.iter().copied().collect()).map_err(to_py_err)?;
+    let mut rd = Array2D::from_vec(w, h, view.iter().copied().collect()).map_err(to_py_err)?;
+    rd.set_no_data(no_data);
     let out = convert_arc_flowdirs_to_richdem_d8(&rd).map_err(to_py_err)?;
-    to_py_array2(py, out)
+    let out_nd = out.no_data();
+    Ok((to_py_array2(py, out)?, out_nd))
 }
 
 #[pyfunction]
@@ -472,6 +544,12 @@ fn get_depression_hierarchy_py<'py>(
     let (h, w) = (rd_dem.height(), rd_dem.width());
 
     let mut lbl_view = labels.as_array_mut();
+    if lbl_view.shape() != [h, w] {
+        return Err(PyValueError::new_err(format!(
+            "labels shape {:?} does not match dem shape [{h}, {w}]",
+            lbl_view.shape()
+        )));
+    }
     let mut rd_labels = Array2D::<DhLabel>::from_vec(w, h, lbl_view.iter().copied().collect())
         .map_err(to_py_err)?;
     let mut rd_flowdirs = Array2D::<Flowdir>::new(w, h, NO_FLOW);
@@ -503,9 +581,31 @@ fn fill_spill_merge_py(
     let rd_dem = from_py_array2_f64(dem, -9999.0, None)?;
     let (h, w) = (rd_dem.height(), rd_dem.width());
 
-    let rd_labels = Array2D::<DhLabel>::from_vec(w, h, labels.as_array().iter().copied().collect())
+    let lbl_view = labels.as_array();
+    if lbl_view.shape() != [h, w] {
+        return Err(PyValueError::new_err(format!(
+            "labels shape {:?} does not match dem shape [{h}, {w}]",
+            lbl_view.shape()
+        )));
+    }
+    let fds_view = flowdirs.as_array();
+    if fds_view.shape() != [h, w] {
+        return Err(PyValueError::new_err(format!(
+            "flowdirs shape {:?} does not match dem shape [{h}, {w}]",
+            fds_view.shape()
+        )));
+    }
+    let mut wtd_view = wtd.as_array_mut();
+    if wtd_view.shape() != [h, w] {
+        return Err(PyValueError::new_err(format!(
+            "wtd shape {:?} does not match dem shape [{h}, {w}]",
+            wtd_view.shape()
+        )));
+    }
+
+    let rd_labels = Array2D::<DhLabel>::from_vec(w, h, lbl_view.iter().copied().collect())
         .map_err(to_py_err)?;
-    let rd_fds = Array2D::<Flowdir>::from_vec(w, h, flowdirs.as_array().iter().copied().collect())
+    let rd_fds = Array2D::<Flowdir>::from_vec(w, h, fds_view.iter().copied().collect())
         .map_err(to_py_err)?;
 
     let mut rd_deps: Vec<Depression<f64>> = deps
@@ -513,7 +613,6 @@ fn fill_spill_merge_py(
         .map(|obj| Depression::from(&*obj.borrow(py)))
         .collect();
 
-    let mut wtd_view = wtd.as_array_mut();
     let mut rd_wtd =
         Array2D::<f64>::from_vec(w, h, wtd_view.iter().copied().collect()).map_err(to_py_err)?;
 
@@ -540,8 +639,10 @@ fn _richdem_rs(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(load_raster_terrio, m)?)?;
     m.add_function(wrap_pyfunction!(save_raster_terrio, m)?)?;
     m.add_function(wrap_pyfunction!(fill_depressions_f64, m)?)?;
+    m.add_function(wrap_pyfunction!(fill_depressions_f32, m)?)?;
     m.add_function(wrap_pyfunction!(breach_depressions_f64, m)?)?;
     m.add_function(wrap_pyfunction!(resolve_flats_f64, m)?)?;
+    m.add_function(wrap_pyfunction!(resolve_flats_f32, m)?)?;
     m.add_function(wrap_pyfunction!(has_depressions_f64, m)?)?;
     m.add_function(wrap_pyfunction!(pit_mask_f64, m)?)?;
     m.add_function(wrap_pyfunction!(flow_accumulation_f64, m)?)?;

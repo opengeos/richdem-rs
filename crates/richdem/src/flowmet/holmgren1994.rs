@@ -33,6 +33,7 @@ pub fn fm_holmgren<T: DemNum>(elevations: &Array2D<T>, xparam: f64) -> Array3D<f
             }
 
             let e = elevations.get(x, y);
+            let mut weights = [0.0f64; 9];
             let mut c_sum = 0.0f64;
 
             for n in 1..=8 {
@@ -45,19 +46,17 @@ pub fn fm_holmgren<T: DemNum>(elevations: &Array2D<T>, xparam: f64) -> Array3D<f
                 if ne.rd_cmp(e) == Ordering::Less {
                     let rise = e.to_f64() - ne.to_f64();
                     let grad = rise / DR[n];
-                    let val = (grad * L[n]).powf(xparam) as f32;
-                    props.set(x, y, n, val);
-                    c_sum += val as f64;
+                    let val = (grad * L[n]).powf(xparam);
+                    weights[n] = val;
+                    c_sum += val;
                 }
             }
 
             if c_sum > 0.0 {
                 props.set(x, y, 0, HAS_FLOW_GEN);
-                let inv_c = 1.0 / c_sum;
-                for n in 1..=8 {
-                    let p = props.get(x, y, n);
-                    if p > 0.0 {
-                        props.set(x, y, n, (p as f64 * inv_c) as f32);
+                for (n, &wval) in weights.iter().enumerate().skip(1) {
+                    if wval > 0.0 {
+                        props.set(x, y, n, (wval / c_sum) as f32);
                     } else {
                         props.set(x, y, n, 0.0);
                     }

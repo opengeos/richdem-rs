@@ -4,11 +4,20 @@ use std::cmp::Ordering;
 use std::collections::VecDeque;
 
 use crate::array2d::Array2D;
-use crate::constants::{D8Flowdir, D8X, D8Y, NO_FLOW};
+use crate::constants::{D8Flowdir, D8X, D8Y, DINF_NO_FLOW, NO_FLOW};
 use crate::error::{Error, Result};
 use crate::flowmet::d8_flowdirs::d8_flow_directions;
 use crate::grid_cell::GridCell;
 use crate::num::DemNum;
+
+#[inline]
+fn no_flow_sentinel<U: DemNum>() -> U {
+    if U::IS_FLOAT {
+        U::from_f64(DINF_NO_FLOW as f64)
+    } else {
+        U::from_i64(NO_FLOW as i64)
+    }
+}
 
 fn d8_masked_flow_dir(flat_mask: &Array2D<i32>, labels: &Array2D<i32>, x: usize, y: usize) -> u8 {
     let mut min_elev = flat_mask.get(x, y);
@@ -40,7 +49,7 @@ pub fn d8_flow_flats<U: DemNum>(
 ) {
     let w = flat_mask.width();
     let h = flat_mask.height();
-    let no_flow = U::from_i64(NO_FLOW as i64);
+    let no_flow = no_flow_sentinel::<U>();
 
     for y in 1..h.saturating_sub(1) {
         for x in 1..w.saturating_sub(1) {
@@ -62,7 +71,7 @@ fn build_away_gradient_fd<U: DemNum>(
     flat_height: &mut [i32],
     labels: &Array2D<i32>,
 ) {
-    let no_flow = U::from_i64(NO_FLOW as i64);
+    let no_flow = no_flow_sentinel::<U>();
     let mut loops = 1i32;
     let marker = GridCell::new(-1, -1);
     edges.push_back(marker);
@@ -101,7 +110,7 @@ fn build_towards_combined_gradient_fd<U: DemNum>(
     flat_height: &[i32],
     labels: &Array2D<i32>,
 ) {
-    let no_flow = U::from_i64(NO_FLOW as i64);
+    let no_flow = no_flow_sentinel::<U>();
     for v in flat_mask.data_mut().iter_mut() {
         *v = -*v;
     }
@@ -176,7 +185,7 @@ fn find_flat_edges_fd<T: DemNum, U: DemNum>(
     flowdirs: &Array2D<U>,
     elevations: &Array2D<T>,
 ) {
-    let no_flow = U::from_i64(NO_FLOW as i64);
+    let no_flow = no_flow_sentinel::<U>();
     for x in 0..flowdirs.width() {
         for y in 0..flowdirs.height() {
             if flowdirs.is_no_data(x, y) {

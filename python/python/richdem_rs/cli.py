@@ -130,7 +130,7 @@ def RdCompare() -> None:
 
     ds1 = rd.LoadGDAL(args.rda1)
     ds2 = rd.LoadGDAL(args.rda2)
-    diff = np.array(ds1 - ds2, dtype=np.float64)
+    diff = np.asarray(ds1, dtype=np.float64) - np.asarray(ds2, dtype=np.float64)
     print(f"Absolute Max difference: {np.nanmax(np.abs(diff)):10.6}")
     print(f"Absolute Min difference: {np.nanmin(np.abs(diff)):10.6}")
     print(f"Absolute Avg difference: {np.mean(np.abs(diff)):10.6}")

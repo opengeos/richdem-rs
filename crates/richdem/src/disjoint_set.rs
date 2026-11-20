@@ -95,17 +95,27 @@ impl DisjointDenseIntSet {
         }
     }
 
-    /// Makes `a` a child of `b`, preserving `b` as the parent representative.
+    /// Merges the set containing `a` into the set containing `b`, preserving
+    /// `b`'s root representative as the combined root.
+    ///
+    /// Both `a` and `b` are resolved to their current representatives first, so
+    /// calling `merge_a_into_b` on non-roots or already-merged elements cannot
+    /// introduce parent cycles.
     pub fn merge_a_into_b(&mut self, a: u32, b: u32) {
         self.check_size(a);
         self.check_size(b);
-        self.parent[a as usize] = b;
-        let ra = self.rank[a as usize];
-        let rb = self.rank[b as usize];
+        let roota = self.find_set(a);
+        let rootb = self.find_set(b);
+        if roota == rootb {
+            return;
+        }
+        self.parent[roota as usize] = rootb;
+        let ra = self.rank[roota as usize];
+        let rb = self.rank[rootb as usize];
         if ra == rb {
-            self.rank[b as usize] += 1;
+            self.rank[rootb as usize] += 1;
         } else if ra > rb {
-            self.rank[b as usize] = ra + 1;
+            self.rank[rootb as usize] = ra + 1;
         }
     }
 

@@ -25,6 +25,8 @@ pub trait DemNum:
 {
     /// Whether this type is floating point (`f32` or `f64`).
     const IS_FLOAT: bool;
+    /// Whether this type is signed (`i8`, `i16`, `i32`, `i64`, `f32`, `f64`).
+    const IS_SIGNED: bool;
     /// Zero value.
     const ZERO: Self;
     /// One value.
@@ -82,8 +84,16 @@ pub trait DemNum:
     /// Convert to `f64`.
     fn to_f64(self) -> f64;
 
-    /// Convert from `f64` (saturating/casting as in C++ `static_cast<T>`).
+    /// Convert from `f64` using Rust's saturating `as` conversion.
     fn from_f64(v: f64) -> Self;
+
+    /// Convert a NoData sentinel from `f64`, preserving C++ RichDEM's unsigned
+    /// wrap for negative sentinel values (e.g. `-1.0` -> `255u8`) while saturating
+    /// signed integer and float targets.
+    #[inline]
+    fn from_nodata_f64(v: f64) -> Self {
+        Self::from_f64(v)
+    }
 
     /// Convert to `i64`.
     fn to_i64(self) -> i64;
@@ -91,14 +101,41 @@ pub trait DemNum:
     /// Convert from `i64`.
     fn from_i64(v: i64) -> Self;
 
+    /// Convert to `u64`.
+    fn to_u64(self) -> u64;
+
+    /// Convert from `u64`.
+    fn from_u64(v: u64) -> Self;
+
+    /// Convert to `i128` losslessly for all integer types.
+    fn to_i128(self) -> i128;
+
+    /// Convert from `i128` with clamping to the target type's range (exact for integers).
+    fn from_i128_clamped(v: i128) -> Self;
+
+    /// Convert `self` to another `DemNum` type without passing integer-to-integer
+    /// conversions through `f64`.
+    #[inline]
+    fn cast_to<U: DemNum>(self) -> U {
+        if !Self::IS_FLOAT && !U::IS_FLOAT {
+            U::from_i128_clamped(self.to_i128())
+        } else {
+            U::from_f64(self.to_f64())
+        }
+    }
+
+    /// Default ESRI ASCII Grid NoData value for this pixel type (`-9999` when representable).
+    fn esri_default_no_data() -> Self;
+
     /// Type name string for diagnostics and formatting.
     fn type_name() -> &'static str;
 }
 
-macro_rules! impl_int_dem_num {
-    ($t:ty, $name:expr) => {
+macro_rules! impl_signed_int_dem_num {
+    ($t:ty, $name:expr, $esri_nd:expr) => {
         impl DemNum for $t {
             const IS_FLOAT: bool = false;
+            const IS_SIGNED: bool = true;
             const ZERO: Self = 0;
             const ONE: Self = 1;
             const MAX: Self = <$t>::MAX;
@@ -133,6 +170,96 @@ macro_rules! impl_int_dem_num {
 
             #[inline]
             fn from_f64(v: f64) -> Self {
+                v as $t
+            }
+
+            #[inline]
+            fn to_i64(self) -> i64 {
+                self as i64
+            }
+
+            #[inline]
+            fn from_i64(v: i64) -> Self {
+                v as $t
+            }
+
+            #[inline]
+            fn to_u64(self) -> u64 {
+                self as u64
+            }
+
+            #[inline]
+            fn from_u64(v: u64) -> Self {
+                v as $t
+            }
+
+            #[inline]
+            fn to_i128(self) -> i128 {
+                self as i128
+            }
+
+            #[inline]
+            fn from_i128_clamped(v: i128) -> Self {
+                v.clamp(<$t>::MIN as i128, <$t>::MAX as i128) as $t
+            }
+
+            #[inline]
+            fn esri_default_no_data() -> Self {
+                $esri_nd
+            }
+
+            #[inline]
+            fn type_name() -> &'static str {
+                $name
+            }
+        }
+    };
+}
+
+macro_rules! impl_unsigned_int_dem_num {
+    ($t:ty, $name:expr) => {
+        impl DemNum for $t {
+            const IS_FLOAT: bool = false;
+            const IS_SIGNED: bool = false;
+            const ZERO: Self = 0;
+            const ONE: Self = 1;
+            const MAX: Self = <$t>::MAX;
+            const LOWEST: Self = <$t>::MIN;
+            const INFINITY: Self = <$t>::MAX;
+            const NEG_INFINITY: Self = <$t>::MIN;
+
+            #[inline]
+            fn is_nan(self) -> bool {
+                false
+            }
+
+            #[inline]
+            fn rd_cmp(self, other: Self) -> Ordering {
+                self.cmp(&other)
+            }
+
+            #[inline]
+            fn next_up_float(self) -> Option<Self> {
+                None
+            }
+
+            #[inline]
+            fn next_down_float(self) -> Option<Self> {
+                None
+            }
+
+            #[inline]
+            fn to_f64(self) -> f64 {
+                self as f64
+            }
+
+            #[inline]
+            fn from_f64(v: f64) -> Self {
+                v as $t
+            }
+
+            #[inline]
+            fn from_nodata_f64(v: f64) -> Self {
                 if v < 0.0 { (v as i64) as $t } else { v as $t }
             }
 
@@ -147,6 +274,31 @@ macro_rules! impl_int_dem_num {
             }
 
             #[inline]
+            fn to_u64(self) -> u64 {
+                self as u64
+            }
+
+            #[inline]
+            fn from_u64(v: u64) -> Self {
+                v as $t
+            }
+
+            #[inline]
+            fn to_i128(self) -> i128 {
+                self as i128
+            }
+
+            #[inline]
+            fn from_i128_clamped(v: i128) -> Self {
+                v.clamp(<$t>::MIN as i128, <$t>::MAX as i128) as $t
+            }
+
+            #[inline]
+            fn esri_default_no_data() -> Self {
+                <$t>::MAX
+            }
+
+            #[inline]
             fn type_name() -> &'static str {
                 $name
             }
@@ -154,19 +306,20 @@ macro_rules! impl_int_dem_num {
     };
 }
 
-impl_int_dem_num!(u8, "uint8");
-impl_int_dem_num!(i8, "int8");
-impl_int_dem_num!(u16, "uint16");
-impl_int_dem_num!(i16, "int16");
-impl_int_dem_num!(u32, "uint32");
-impl_int_dem_num!(i32, "int32");
-impl_int_dem_num!(u64, "uint64");
-impl_int_dem_num!(i64, "int64");
+impl_unsigned_int_dem_num!(u8, "uint8");
+impl_signed_int_dem_num!(i8, "int8", i8::MIN);
+impl_unsigned_int_dem_num!(u16, "uint16");
+impl_signed_int_dem_num!(i16, "int16", -9999);
+impl_unsigned_int_dem_num!(u32, "uint32");
+impl_signed_int_dem_num!(i32, "int32", -9999);
+impl_unsigned_int_dem_num!(u64, "uint64");
+impl_signed_int_dem_num!(i64, "int64", -9999);
 
 macro_rules! impl_float_dem_num {
     ($t:ty, $name:expr) => {
         impl DemNum for $t {
             const IS_FLOAT: bool = true;
+            const IS_SIGNED: bool = true;
             const ZERO: Self = 0.0;
             const ONE: Self = 1.0;
             const MAX: Self = <$t>::MAX;
@@ -217,6 +370,31 @@ macro_rules! impl_float_dem_num {
             #[inline]
             fn from_i64(v: i64) -> Self {
                 v as $t
+            }
+
+            #[inline]
+            fn to_u64(self) -> u64 {
+                self as u64
+            }
+
+            #[inline]
+            fn from_u64(v: u64) -> Self {
+                v as $t
+            }
+
+            #[inline]
+            fn to_i128(self) -> i128 {
+                self as i128
+            }
+
+            #[inline]
+            fn from_i128_clamped(v: i128) -> Self {
+                v as $t
+            }
+
+            #[inline]
+            fn esri_default_no_data() -> Self {
+                -9999.0
             }
 
             #[inline]

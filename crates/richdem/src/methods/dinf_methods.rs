@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 use std::f64::consts::PI;
 
 use crate::array2d::Array2D;
-use crate::constants::{DINF_NO_DATA, NO_FLOW};
+use crate::constants::{DINF_NO_DATA, DINF_NO_FLOW};
 use crate::grid_cell::GridCell;
 use crate::num::DemNum;
 
@@ -26,8 +26,8 @@ fn area_proportion(flowdir: f64, nhigh: usize, nlow: Option<usize>) -> (f64, f64
     if nlow.is_none() {
         (1.0, 0.0)
     } else {
-        let phigh = ((nhigh as f64) * (PI / 4.0) - flowdir) / (PI / 4.0);
-        let plow = 1.0 - phigh;
+        let plow = ((nhigh as f64) * (PI / 4.0) - flowdir) / (PI / 4.0);
+        let phigh = 1.0 - plow;
         (phigh, plow)
     }
 }
@@ -51,7 +51,7 @@ pub fn dinf_upslope_area<T: DemNum, U: DemNum>(flowdirs: &Array2D<T>) -> Array2D
                 continue;
             }
             let fd = flowdirs.get(x, y).to_f64();
-            if fd == NO_FLOW as f64 {
+            if fd == DINF_NO_FLOW as f64 || fd < 0.0 {
                 continue;
             }
             let (n_high, n_low) = where_do_i_flow(fd);
@@ -75,7 +75,7 @@ pub fn dinf_upslope_area<T: DemNum, U: DemNum>(flowdirs: &Array2D<T>) -> Array2D
     let mut sources = VecDeque::<GridCell>::new();
     for y in 0..h {
         for x in 0..w {
-            if flowdirs.is_no_data(x, y) || flowdirs.get(x, y).to_f64() == NO_FLOW as f64 {
+            if flowdirs.is_no_data(x, y) {
                 continue;
             }
             if dependency.get(x, y) == 0 {
@@ -92,7 +92,7 @@ pub fn dinf_upslope_area<T: DemNum, U: DemNum>(flowdirs: &Array2D<T>) -> Array2D
         area.set_xy(c.x, c.y, U::from_f64(cur_area));
 
         let fd = flowdirs.get_xy(c.x, c.y).to_f64();
-        if fd == NO_FLOW as f64 {
+        if fd == DINF_NO_FLOW as f64 || fd < 0.0 {
             continue;
         }
 

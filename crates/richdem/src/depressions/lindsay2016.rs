@@ -155,7 +155,7 @@ pub fn lindsay2016<T: DemNum>(
         return Ok(());
     }
 
-    let orig_dem = if mode == LindsayMode::ConstrainedBreaching {
+    let orig_dem = if mode != LindsayMode::CompleteBreaching {
         Some(dem.clone())
     } else {
         None
@@ -211,11 +211,14 @@ pub fn lindsay2016<T: DemNum>(
         }
     }
 
+    let max_depth_f64 = max_depth.to_f64();
+
     while let Some(c) = pq.pop() {
         if pits.get_xy(c.x, c.y) != 0 {
             let mut pathlen: u32 = 0;
-            let mut cc = dem.xy_to_i(c.x as usize, c.y as usize) as u32;
-            let mut pathdepth = T::LOWEST;
+            let pit_idx = dem.xy_to_i(c.x as usize, c.y as usize) as u32;
+            let mut cc = pit_idx;
+            let mut pathdepth = f64::NEG_INFINITY;
             let mut target_height = dem.get_xy(c.x, c.y);
 
             if mode == LindsayMode::CompleteBreaching {
@@ -235,8 +238,8 @@ pub fn lindsay2016<T: DemNum>(
                     let ref_elev = orig_dem
                         .as_ref()
                         .map_or_else(|| dem.get_i(cc as usize), |o| o.get_i(cc as usize));
-                    let diff = ref_elev - target_height;
-                    pathdepth = pathdepth.rd_max(diff);
+                    let diff = ref_elev.to_f64() - target_height.to_f64();
+                    pathdepth = pathdepth.max(diff);
                     cc = backlinks.get_i(cc as usize);
                     if eps_gradients {
                         target_height = target_height.next_down_float().unwrap();
@@ -244,10 +247,10 @@ pub fn lindsay2016<T: DemNum>(
                     pathlen += 1;
                 }
 
-                cc = dem.xy_to_i(c.x as usize, c.y as usize) as u32;
+                cc = pit_idx;
                 target_height = dem.get_xy(c.x, c.y);
 
-                if pathlen <= max_path_len && pathdepth.rd_cmp(max_depth) != Ordering::Greater {
+                if pathlen <= max_path_len && pathdepth <= max_depth_f64 {
                     while cc != NO_BACK_LINK
                         && dem.get_i(cc as usize).rd_cmp(target_height) != Ordering::Less
                     {
@@ -265,12 +268,13 @@ pub fn lindsay2016<T: DemNum>(
                         && dem.get_i(cc as usize).rd_cmp(target_height) != Ordering::Less
                     {
                         let orig_e = orig.get_i(cc as usize);
-                        let min_allowed =
-                            if orig_e.rd_cmp(target_height + max_depth) == Ordering::Greater {
-                                orig_e - max_depth
-                            } else {
-                                target_height
-                            };
+                        let orig_f = orig_e.to_f64();
+                        let limit_f = target_height.to_f64() + max_depth_f64;
+                        let min_allowed = if orig_f > limit_f {
+                            T::from_f64(orig_f - max_depth_f64)
+                        } else {
+                            target_height
+                        };
                         let new_e = dem.get_i(cc as usize).rd_min(min_allowed);
                         dem.set_i(cc as usize, new_e);
                         if eps_gradients {
@@ -279,6 +283,14 @@ pub fn lindsay2016<T: DemNum>(
                         cc = backlinks.get_i(cc as usize);
                         steps += 1;
                     }
+                    if steps == 0 && !fill_depressions {
+                        dem.set_i(pit_idx as usize, orig.get_i(pit_idx as usize));
+                    }
+                } else if !fill_depressions {
+                    // Selective breaching rejected this pit and filling is disabled:
+                    // restore the pit's original elevation instead of leaving it filled.
+                    let orig = orig_dem.as_ref().unwrap();
+                    dem.set_i(pit_idx as usize, orig.get_i(pit_idx as usize));
                 }
             }
 

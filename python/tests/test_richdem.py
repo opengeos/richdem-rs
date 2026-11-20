@@ -4,6 +4,7 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+import pytest
 import richdem_rs as rd
 from richdem_rs import depression_hierarchy as dephier
 
@@ -69,3 +70,56 @@ def test_core_hydrology_and_geotiff_io() -> None:
         loaded = rd.LoadGDAL(str(tif))
         assert loaded.shape == filled.shape
         assert np.allclose(np.asarray(loaded), np.asarray(filled))
+
+
+def test_python_review_regression_cases() -> None:
+    # 1. u64 > 2**53 preserved across SaveGDAL / LoadGDAL
+    big_val = np.uint64(9007199254740993)
+    arr_u64 = rd.rdarray(
+        np.array([[big_val, big_val + np.uint64(2)]], dtype=np.uint64),
+        no_data=int(np.iinfo(np.uint64).max),
+    )
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tif = Path(tmpdir) / "u64.tif"
+        rd.SaveGDAL(str(tif), arr_u64)
+        loaded = rd.LoadGDAL(str(tif))
+        assert loaded.dtype == np.uint64
+        assert int(loaded[0, 0]) == int(big_val)
+        assert int(loaded[0, 1]) == int(big_val) + 2
+
+    # 2. float32 epsilon filling preserves non-flat gradient
+    f32_dem = rd.rdarray(
+        np.array([[1, 1, 1], [1, 0, 1], [1, 1, 1]], dtype=np.float32),
+        no_data=-9999.0,
+    )
+    f32_filled = rd.FillDepressions(f32_dem, epsilon=True)
+    assert f32_filled is not None
+    assert f32_filled.dtype == np.float32
+    assert float(f32_filled[1, 1]) > 1.0
+
+    # 3. Integer weights rejected for in_place accumulation
+    dem = rd.generate_perlin_terrain(8, 7)
+    filled = rd.FillDepressions(dem, epsilon=True)
+    assert filled is not None
+    int_weights = rd.rdarray(np.ones(dem.shape, dtype=np.int32), no_data=-9999)
+    with pytest.raises(TypeError):
+        rd.FlowAccumulation(filled, method="Dinf", weights=int_weights, in_place=True)
+
+    # 4. ArcGIS conversion preserves NoData=255
+    arc = rd.rdarray(np.array([[1, 16, 255]], dtype=np.uint8), no_data=255)
+    rd_d8 = rd.convert_arc_flowdirs_to_richdem_d8(arc)
+    assert int(rd_d8.no_data) == 255
+    assert list(rd_d8[0]) == [5, 1, 255]
+
+    # 5. Shape mismatch rejected in get_depression_hierarchy
+    dem6 = rd.rdarray(np.zeros((6, 6), dtype=np.float64), no_data=-9999.0)
+    bad_labels = rd.get_new_depression_hierarchy_labels((3, 12))
+    with pytest.raises(ValueError):
+        rd.get_depression_hierarchy(dem6, bad_labels)
+
+    # 6. NumPy ndarray geotransform works in get_depression_hierarchy
+    dem6.geotransform = rd.STANDARD_GEOTRANSFORM.copy()
+    ok_labels = rd.get_new_depression_hierarchy_labels((6, 6))
+    dh, fds = rd.get_depression_hierarchy(dem6, ok_labels)
+    assert len(dh) >= 1
+    assert fds.shape == (6, 6)

@@ -10,7 +10,7 @@ use std::collections::{BinaryHeap, HashMap};
 use std::fmt::Write as _;
 
 use crate::array2d::{Array2D, STANDARD_GEOTRANSFORM};
-use crate::constants::{Flowdir, Topology, fp_le};
+use crate::constants::{Flowdir, NO_FLOW, Topology, fp_le};
 use crate::disjoint_set::DisjointDenseIntSet;
 use crate::error::{Error, Result};
 use crate::grid_cell::KeyValEntry;
@@ -66,6 +66,14 @@ pub struct Depression<T: DemNum> {
     pub water_vol: f64,
     /// Sum of elevations of all cells contained within this depression and its children.
     pub total_elevation: f64,
+    /// Topology (`D8` or `D4`) used to build this hierarchy (stored on the root `OCEAN` node).
+    #[cfg_attr(feature = "serde", serde(skip, default = "default_topology"))]
+    pub topology: Topology,
+}
+
+#[cfg(feature = "serde")]
+fn default_topology() -> Topology {
+    Topology::D8
 }
 
 impl<T: DemNum> Default for Depression<T> {
@@ -87,6 +95,7 @@ impl<T: DemNum> Default for Depression<T> {
             dep_vol: 0.0,
             water_vol: 0.0,
             total_elevation: 0.0,
+            topology: Topology::D8,
         }
     }
 }
@@ -156,6 +165,15 @@ pub fn get_depression_hierarchy<T: DemNum>(
 
     let w = dem.width();
     let h = dem.height();
+    let total_cells = w.checked_mul(h).ok_or_else(|| {
+        Error::DimensionMismatch(format!("raster dimensions overflow usize ({w}x{h})"))
+    })?;
+    if total_cells >= NO_VALUE as usize {
+        return Err(Error::DimensionMismatch(format!(
+            "get_depression_hierarchy requires fewer than {} cells (FlatIdx u32 limit), got {total_cells}",
+            NO_VALUE
+        )));
+    }
     let dx = topo.dx();
     let dy = topo.dy();
     let dinverse = topo.dinverse();
@@ -164,16 +182,39 @@ pub fn get_depression_hierarchy<T: DemNum>(
     let mut depressions: DepressionHierarchy<T> = Vec::new();
     let mut ocean_seeds: Vec<FlatIdx> = Vec::with_capacity((w * h) / 40);
     let mut land_seeds: Vec<FlatIdx> = Vec::with_capacity((w * h) / 40);
+    let mut has_ocean = false;
+    let nd = dem.no_data();
 
+    // First validate labels and classify NoData cells as OCEAN (matching Barnes 2020 reference).
     for y in 0..h {
         for x in 0..w {
             let l = label.get(x, y);
-            if l != OCEAN {
-                if l != NO_DEP {
-                    return Err(Error::InvalidArgument(
-                        "Label array given to get_depression_hierarchy must contain only NO_DEP and OCEAN labels!".into(),
-                    ));
-                }
+            if l != OCEAN && l != NO_DEP {
+                return Err(Error::InvalidArgument(
+                    "Label array given to get_depression_hierarchy must contain only NO_DEP and OCEAN labels!".into(),
+                ));
+            }
+            if dem.get(x, y).rd_eq(nd) {
+                label.set(x, y, OCEAN);
+            }
+            if label.get(x, y) == OCEAN {
+                has_ocean = true;
+            }
+        }
+    }
+
+    if !has_ocean {
+        return Err(Error::InvalidArgument(
+            "No OCEAN cells found, could not make a DepressionHierarchy!".into(),
+        ));
+    }
+
+    // Clear any stale flow directions before flood assignment.
+    flowdirs.set_all(NO_FLOW);
+
+    for y in 0..h {
+        for x in 0..w {
+            if label.get(x, y) != OCEAN {
                 continue;
             }
             let mut has_non_ocean = false;
@@ -191,19 +232,20 @@ pub fn get_depression_hierarchy<T: DemNum>(
         }
     }
 
-    if ocean_seeds.is_empty() {
-        return Err(Error::InvalidArgument(
-            "No OCEAN cells found, could not make a DepressionHierarchy!".into(),
-        ));
-    }
-
     // Depression 0 is always the ocean.
     depressions.push(Depression {
         pit_elev: T::NEG_INFINITY,
         pit_cell: NO_VALUE,
         dep_label: OCEAN,
+        topology: topo,
         ..Default::default()
     });
+
+    if ocean_seeds.is_empty() {
+        // All cells are OCEAN (no land cells to process).
+        calculate_total_volumes(&mut depressions);
+        return Ok(depressions);
+    }
 
     // Find pit cells (cells without any strictly lower neighbor).
     for y in 0..h {
@@ -358,7 +400,21 @@ pub fn get_depression_hierarchy<T: DemNum>(
             djset.merge_a_into_b(depa_set, OCEAN);
         } else {
             let newlabel = depressions.len() as DhLabel;
-            let depa_pit_cell = depressions[depa_set as usize].pit_cell;
+            let (meta_pit_cell, meta_pit_elev) = if depressions[depa_set as usize]
+                .pit_elev
+                .rd_cmp(depressions[depb_set as usize].pit_elev)
+                != Ordering::Greater
+            {
+                (
+                    depressions[depa_set as usize].pit_cell,
+                    depressions[depa_set as usize].pit_elev,
+                )
+            } else {
+                (
+                    depressions[depb_set as usize].pit_cell,
+                    depressions[depb_set as usize].pit_elev,
+                )
+            };
 
             {
                 let depa = &mut depressions[depa_set as usize];
@@ -383,7 +439,8 @@ pub fn get_depression_hierarchy<T: DemNum>(
                 lchild: depa_set,
                 rchild: depb_set,
                 dep_label: newlabel,
-                pit_cell: depa_pit_cell,
+                pit_cell: meta_pit_cell,
+                pit_elev: meta_pit_elev,
                 ..Default::default()
             });
 
@@ -516,13 +573,11 @@ pub fn last_layer<T: DemNum>(
     for y in 0..label.height() {
         for x in 0..label.width() {
             let mut mylabel = label.get(x, y);
-            loop {
+            while mylabel != OCEAN {
                 if dem.get(x, y).rd_cmp(depressions[mylabel as usize].out_elev) != Ordering::Less {
                     mylabel = depressions[mylabel as usize].parent;
                 } else {
-                    if mylabel != OCEAN {
-                        mylabel = (-3i32) as DhLabel;
-                    }
+                    mylabel = (-3i32) as DhLabel;
                     break;
                 }
             }

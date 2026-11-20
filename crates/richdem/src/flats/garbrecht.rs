@@ -4,9 +4,11 @@
 //! over flat surfaces in raster digital elevation models. Journal of Hydrology 193, 204-213.
 
 use std::cmp::Ordering;
+use std::collections::VecDeque;
 
 use crate::array2d::Array2D;
 use crate::constants::{D8Flowdir, D8X, D8Y, NO_FLOW};
+use crate::error::{Error, Result};
 use crate::flowmet::d8_flowdirs::d8_flow_directions;
 use crate::grid_cell::GridCell;
 use crate::num::DemNum;
@@ -15,7 +17,7 @@ fn collect_flats(flowdirs: &Array2D<D8Flowdir>) -> Vec<GridCell> {
     let mut flats = Vec::new();
     for x in 0..flowdirs.width() {
         for y in 0..flowdirs.height() {
-            if flowdirs.get(x, y) == NO_FLOW as u8 {
+            if flowdirs.get(x, y) == NO_FLOW as u8 && !flowdirs.is_no_data(x, y) {
                 flats.push(GridCell::new(x as i32, y as i32));
             }
         }
@@ -23,49 +25,71 @@ fn collect_flats(flowdirs: &Array2D<D8Flowdir>) -> Vec<GridCell> {
     flats
 }
 
+/// Computes the Garbrecht-Martz gradient towards lower terrain via O(N) multi-source BFS
+/// seeded from drainable flat cells (flat cells adjacent to a strictly lower draining cell).
+/// Undrainable flat components (with no outlet) are never visited and remain at `0`.
 fn gradient_towards_lower<T: DemNum>(
     elevations: &Array2D<T>,
     flowdirs: &Array2D<D8Flowdir>,
     flats: &[GridCell],
-) -> Array2D<i32> {
+) -> (Array2D<i32>, Vec<GridCell>) {
+    let w = elevations.width();
+    let h = elevations.height();
     let mut inc1 = Array2D::<i32>::make_from_template(elevations, 0);
-    let mut loops = 0i32;
-    let max_iters = flats.len().saturating_add(1);
+    let mut visited = Array2D::<u8>::new(w, h, 0);
+    let mut queue = VecDeque::<GridCell>::new();
+    let mut drainable_flats = Vec::new();
 
-    for _ in 0..max_iters {
-        let mut number_incremented = 0usize;
-        for c in flats {
-            let mut increment = true;
-            let ce = elevations.get_xy(c.x, c.y);
-            for n in 1..=8 {
-                let nx = c.x + D8X[n];
-                let ny = c.y + D8Y[n];
-                if !elevations.in_grid(nx, ny) {
-                    continue;
-                }
-                let ne = elevations.get_xy(nx, ny);
-                let nfd = flowdirs.get_xy(nx, ny);
-                if (ne.rd_cmp(ce) == Ordering::Less
-                    && nfd != NO_FLOW as u8
-                    && !flowdirs.is_no_data_xy(nx, ny))
-                    || (inc1.get_xy(nx, ny) < loops && ne.rd_eq(ce))
-                {
-                    increment = false;
-                    break;
-                }
+    for c in flats {
+        let ce = elevations.get_xy(c.x, c.y);
+        let mut touches_lower_draining = false;
+        for n in 1..=8 {
+            let nx = c.x + D8X[n];
+            let ny = c.y + D8Y[n];
+            if !elevations.in_grid(nx, ny) {
+                continue;
             }
-            if increment {
-                let cur = inc1.get_xy(c.x, c.y);
-                inc1.set_xy(c.x, c.y, cur + 1);
-                number_incremented += 1;
+            let ne = elevations.get_xy(nx, ny);
+            let nfd = flowdirs.get_xy(nx, ny);
+            if ne.rd_cmp(ce) == Ordering::Less
+                && nfd != NO_FLOW as u8
+                && !flowdirs.is_no_data_xy(nx, ny)
+            {
+                touches_lower_draining = true;
+                break;
             }
         }
-        if number_incremented == 0 {
-            break;
+        if touches_lower_draining {
+            visited.set_xy(c.x, c.y, 1);
+            inc1.set_xy(c.x, c.y, 0);
+            queue.push_back(*c);
+            drainable_flats.push(*c);
         }
-        loops += 1;
     }
-    inc1
+
+    while let Some(c) = queue.pop_front() {
+        let ce = elevations.get_xy(c.x, c.y);
+        let dist = inc1.get_xy(c.x, c.y);
+        for n in 1..=8 {
+            let nx = c.x + D8X[n];
+            let ny = c.y + D8Y[n];
+            if !elevations.in_grid(nx, ny) || visited.get_xy(nx, ny) != 0 {
+                continue;
+            }
+            if flowdirs.get_xy(nx, ny) == NO_FLOW as u8
+                && !flowdirs.is_no_data_xy(nx, ny)
+                && elevations.get_xy(nx, ny).rd_eq(ce)
+            {
+                visited.set_xy(nx, ny, 1);
+                inc1.set_xy(nx, ny, dist + 1);
+                let nc = GridCell::new(nx, ny);
+                queue.push_back(nc);
+                drainable_flats.push(nc);
+            }
+        }
+    }
+
+    (inc1, drainable_flats)
 }
 
 fn gradient_away_from_higher<T: DemNum>(
@@ -123,17 +147,28 @@ fn gradient_away_from_higher<T: DemNum>(
 
 /// Resolves flat surfaces in `elevations` using Garbrecht and Martz (1997) with
 /// increment `epsilon` (default `0.001` in RichDEM) and updates `flowdirs`.
+///
+/// Requires a floating-point DEM; returns [`Error::UnsupportedDataType`] for integer DEMs.
 pub fn garbrecht_alg<T: DemNum>(
     elevations: &mut Array2D<T>,
     flowdirs: &mut Array2D<D8Flowdir>,
     epsilon: f64,
-) {
+) -> Result<()> {
+    if !T::IS_FLOAT {
+        return Err(Error::UnsupportedDataType(
+            "garbrecht_alg requires a floating-point DEM to apply fractional epsilon increments"
+                .into(),
+        ));
+    }
     let flats = collect_flats(flowdirs);
     if flats.is_empty() {
-        return;
+        return Ok(());
     }
-    let inc1 = gradient_towards_lower(elevations, flowdirs, &flats);
-    let inc2 = gradient_away_from_higher(elevations, &flats);
+    let (inc1, drainable_flats) = gradient_towards_lower(elevations, flowdirs, &flats);
+    if drainable_flats.is_empty() {
+        return Ok(());
+    }
+    let inc2 = gradient_away_from_higher(elevations, &drainable_flats);
 
     for x in 0..elevations.width() {
         for y in 0..elevations.height() {
@@ -149,4 +184,5 @@ pub fn garbrecht_alg<T: DemNum>(
     }
 
     *flowdirs = d8_flow_directions(elevations);
+    Ok(())
 }

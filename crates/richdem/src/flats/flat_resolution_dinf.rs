@@ -3,7 +3,7 @@
 use std::f64::consts::PI;
 
 use crate::array2d::Array2D;
-use crate::constants::{D8X, D8Y, NO_FLOW};
+use crate::constants::{D8X, D8Y, DINF_NO_FLOW};
 use crate::flats::flat_resolution::resolve_flats_barnes;
 use crate::flowmet::dinf_flowdirs::{AC, AF, DX_E1, DX_E2, DY_E1, DY_E2, dinf_flow_directions};
 use crate::num::DemNum;
@@ -73,7 +73,7 @@ fn dinf_masked_flow_dir(
                 return D8_TO_DINF[n];
             }
         }
-        NO_FLOW as f32
+        DINF_NO_FLOW
     }
 }
 
@@ -91,7 +91,7 @@ pub fn dinf_flow_flats(
             if flat_resolution_mask.is_no_data(x, y) {
                 continue;
             }
-            if flowdirs.get(x, y) == NO_FLOW as f32 {
+            if flowdirs.get(x, y) == DINF_NO_FLOW {
                 flowdirs.set(
                     x,
                     y,

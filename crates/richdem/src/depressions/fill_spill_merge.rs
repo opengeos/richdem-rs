@@ -9,7 +9,7 @@ use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::array2d::Array2D;
-use crate::constants::{D8_INVERSE, D8X, D8Y, Flowdir, NO_FLOW, fp_eq, fp_ge, fp_le};
+use crate::constants::{Flowdir, NO_FLOW, Topology, fp_eq, fp_ge, fp_le};
 use crate::depressions::hierarchy::{DepressionHierarchy, DhLabel, FlatIdx, NO_VALUE, OCEAN};
 use crate::error::{Error, Result};
 use crate::grid_cell::GridCellZkHighPq;
@@ -86,6 +86,66 @@ pub fn backfill_depression<T: DemNum, W: DemNum>(
     }
 }
 
+/// Validates dimensions, flow directions, and depression labels before mutating state.
+fn validate_fsm_inputs<T: DemNum, W: DemNum>(
+    topo: &Array2D<T>,
+    label: &Array2D<DhLabel>,
+    flowdirs: &Array2D<Flowdir>,
+    deps: &DepressionHierarchy<T>,
+    wtd: &Array2D<W>,
+    topology: Topology,
+) -> Result<()> {
+    let w = topo.width();
+    let h = topo.height();
+    if label.width() != w
+        || label.height() != h
+        || flowdirs.width() != w
+        || flowdirs.height() != h
+        || wtd.width() != w
+        || wtd.height() != h
+    {
+        return Err(Error::DimensionMismatch(
+            "topo, label, flowdirs, and wtd must have identical dimensions".into(),
+        ));
+    }
+    if deps.is_empty() {
+        return Err(Error::InvalidArgument(
+            "DepressionHierarchy must contain at least the OCEAN entry".into(),
+        ));
+    }
+    let dx = topology.dx();
+    let dy = topology.dy();
+    let nmax = topology.nmax() as Flowdir;
+    for y in 0..h {
+        for x in 0..w {
+            let lbl = label.get(x, y) as usize;
+            if lbl >= deps.len() {
+                return Err(Error::InvalidArgument(format!(
+                    "label {lbl} at ({x}, {y}) exceeds DepressionHierarchy length {}",
+                    deps.len()
+                )));
+            }
+            let dir = flowdirs.get(x, y);
+            if dir == NO_FLOW {
+                continue;
+            }
+            if dir < 1 || dir > nmax {
+                return Err(Error::InvalidArgument(format!(
+                    "invalid flow direction {dir} at ({x}, {y}) for {topology:?} topology"
+                )));
+            }
+            let nx = x as i32 + dx[dir as usize];
+            let ny = y as i32 + dy[dir as usize];
+            if !topo.in_grid(nx, ny) {
+                return Err(Error::InvalidArgument(format!(
+                    "flow direction {dir} at ({x}, {y}) points outside grid ({w}x{h})"
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Routes standing surface water downhill along `flowdirs` into leaf depression pits
 /// (or into `OCEAN`), saturating negative groundwater storage along the way.
 pub fn move_water_into_pits<T: DemNum, W: DemNum>(
@@ -95,20 +155,36 @@ pub fn move_water_into_pits<T: DemNum, W: DemNum>(
     deps: &mut DepressionHierarchy<T>,
     wtd: &mut Array2D<W>,
 ) {
+    let topology = deps.first().map_or(Topology::D8, |d| d.topology);
+    move_water_into_pits_with_topology(topo, label, flowdirs, deps, wtd, topology);
+}
+
+fn move_water_into_pits_with_topology<T: DemNum, W: DemNum>(
+    topo: &Array2D<T>,
+    label: &Array2D<DhLabel>,
+    flowdirs: &Array2D<Flowdir>,
+    deps: &mut DepressionHierarchy<T>,
+    wtd: &mut Array2D<W>,
+    topology: Topology,
+) {
     let w = topo.width();
     let h = topo.height();
+    let dx = topology.dx();
+    let dy = topology.dy();
+    let dinverse = topology.dinverse();
+    let nmax = topology.nmax();
 
     let mut dependencies = Array2D::<i8>::new(w, h, 0);
     for y in 0..h {
         for x in 0..w {
             let mut dep_count: i8 = 0;
-            for n in 1..=8 {
-                let nx = x as i32 + D8X[n];
-                let ny = y as i32 + D8Y[n];
+            for n in 1..=nmax {
+                let nx = x as i32 + dx[n];
+                let ny = y as i32 + dy[n];
                 if !topo.in_grid(nx, ny) {
                     continue;
                 }
-                if flowdirs.get_xy(nx, ny) == D8_INVERSE[n] as Flowdir {
+                if flowdirs.get_xy(nx, ny) == dinverse[n] as Flowdir {
                     dep_count += 1;
                 }
             }
@@ -126,11 +202,15 @@ pub fn move_water_into_pits<T: DemNum, W: DemNum>(
     while let Some(c) = q.pop_front() {
         let ci = c as usize;
         let ndir = flowdirs.get_i(ci);
-        let downstream: Option<usize> = if ndir != NO_FLOW {
+        let downstream: Option<usize> = if ndir != NO_FLOW && ndir >= 1 && (ndir as usize) <= nmax {
             let (x, y) = topo.i_to_xy(ci);
-            let nx = x as i32 + D8X[ndir as usize];
-            let ny = y as i32 + D8Y[ndir as usize];
-            Some(topo.xy_to_i(nx as usize, ny as usize))
+            let nx = x as i32 + dx[ndir as usize];
+            let ny = y as i32 + dy[ndir as usize];
+            if topo.in_grid(nx, ny) {
+                Some(topo.xy_to_i(nx as usize, ny as usize))
+            } else {
+                None
+            }
         } else {
             None
         };
@@ -290,8 +370,30 @@ impl SubtreeDepressionInfo {
 }
 
 /// Spreads `water_vol` across cells belonging to `dep_labels` starting from `pit_cell`
-/// up to `out_cell`, updating `wtd` in place.
+/// up to `out_cell`, updating `wtd` in place (D8 topology).
 pub fn fill_depressions_fsm<T: DemNum, W: DemNum>(
+    pit_cell: FlatIdx,
+    out_cell: FlatIdx,
+    dep_labels: &HashSet<DhLabel>,
+    water_vol: f64,
+    topo: &Array2D<T>,
+    label: &Array2D<DhLabel>,
+    wtd: &mut Array2D<W>,
+) -> Result<()> {
+    fill_depressions_fsm_with_topology(
+        pit_cell,
+        out_cell,
+        dep_labels,
+        water_vol,
+        topo,
+        label,
+        wtd,
+        Topology::D8,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn fill_depressions_fsm_with_topology<T: DemNum, W: DemNum>(
     pit_cell: FlatIdx,
     out_cell: FlatIdx,
     dep_labels: &HashSet<DhLabel>,
@@ -299,10 +401,15 @@ pub fn fill_depressions_fsm<T: DemNum, W: DemNum>(
     topo: &Array2D<T>,
     label: &Array2D<DhLabel>,
     wtd: &mut Array2D<W>,
+    topology: Topology,
 ) -> Result<()> {
     if water_vol == 0.0 {
         return Ok(());
     }
+
+    let dx = topology.dx();
+    let dy = topology.dy();
+    let nmax = topology.nmax();
 
     let mut visited = HashSet::<FlatIdx>::with_capacity(2048);
     let mut flood_q = GridCellZkHighPq::<T>::new();
@@ -312,8 +419,16 @@ pub fn fill_depressions_fsm<T: DemNum, W: DemNum>(
     visited.insert(pit_cell);
 
     let mut cells_affected: Vec<FlatIdx> = Vec::new();
+    let mut saved_wtd: Vec<(usize, W)> = Vec::new();
     let mut total_elevation = 0.0f64;
+    let mut out_cell_fallback_len: Option<usize> = None;
     let out_elev = topo.get_i(out_cell as usize);
+
+    let restore_wtd = |wtd: &mut Array2D<W>, saved: &[(usize, W)]| {
+        for &(ci, orig) in saved {
+            wtd.set_i(ci, orig);
+        }
+    };
 
     while let Some(c) = flood_q.pop() {
         let ci = topo.xy_to_i(c.x as usize, c.y as usize) as FlatIdx;
@@ -321,6 +436,7 @@ pub fn fill_depressions_fsm<T: DemNum, W: DemNum>(
         let current_volume = depression_volume(celev, cells_affected.len(), total_elevation);
 
         if dep_labels.contains(&label.get_i(ci as usize)) && wtd.get_i(ci as usize).to_f64() > 0.0 {
+            restore_wtd(wtd, &saved_wtd);
             return Err(Error::Algorithm(
                 "A cell was discovered in an unfilled depression with wtd > 0!".into(),
             ));
@@ -347,14 +463,15 @@ pub fn fill_depressions_fsm<T: DemNum, W: DemNum>(
 
         if ci != out_cell {
             cells_affected.push(ci);
+            saved_wtd.push((ci as usize, wtd.get_i(ci as usize)));
             water_vol += cwtd;
             wtd.set_i(ci as usize, W::ZERO);
             total_elevation += celev.to_f64();
         }
 
-        for n in 1..=8 {
-            let nx = c.x + D8X[n];
-            let ny = c.y + D8Y[n];
+        for n in 1..=nmax {
+            let nx = c.x + dx[n];
+            let ny = c.y + dy[n];
             if !topo.in_grid(nx, ny) {
                 continue;
             }
@@ -371,12 +488,21 @@ pub fn fill_depressions_fsm<T: DemNum, W: DemNum>(
         }
 
         if flood_q.is_empty() {
-            let (ox, oy) = topo.i_to_xy(out_cell as usize);
-            flood_q.emplace(ox as i32, oy as i32, out_elev);
-            visited.insert(out_cell);
+            if out_cell_fallback_len != Some(cells_affected.len()) {
+                out_cell_fallback_len = Some(cells_affected.len());
+                let (ox, oy) = topo.i_to_xy(out_cell as usize);
+                flood_q.emplace(ox as i32, oy as i32, out_elev);
+                visited.insert(out_cell);
+            } else {
+                restore_wtd(wtd, &saved_wtd);
+                return Err(Error::Algorithm(
+                    "Depression cannot accommodate remaining water volume up to out_cell!".into(),
+                ));
+            }
         }
     }
 
+    restore_wtd(wtd, &saved_wtd);
     Err(Error::Algorithm(
         "PQ loop exited without filling a depression!".into(),
     ))
@@ -388,6 +514,7 @@ fn find_depressions_to_fill<T: DemNum, W: DemNum>(
     topo: &Array2D<T>,
     label: &Array2D<DhLabel>,
     wtd: &mut Array2D<W>,
+    topology: Topology,
 ) -> Result<SubtreeDepressionInfo> {
     if current_depression == NO_VALUE {
         return Ok(SubtreeDepressionInfo::empty());
@@ -395,15 +522,15 @@ fn find_depressions_to_fill<T: DemNum, W: DemNum>(
 
     let this_dep = &deps[current_depression as usize];
     for &c in &this_dep.ocean_linked {
-        find_depressions_to_fill(c, deps, topo, label, wtd)?;
+        find_depressions_to_fill(c, deps, topo, label, wtd, topology)?;
     }
 
     if current_depression == OCEAN {
         return Ok(SubtreeDepressionInfo::empty());
     }
 
-    let left_info = find_depressions_to_fill(this_dep.lchild, deps, topo, label, wtd)?;
-    let right_info = find_depressions_to_fill(this_dep.rchild, deps, topo, label, wtd)?;
+    let left_info = find_depressions_to_fill(this_dep.lchild, deps, topo, label, wtd, topology)?;
+    let right_info = find_depressions_to_fill(this_dep.rchild, deps, topo, label, wtd, topology)?;
 
     let mut combined = SubtreeDepressionInfo::empty();
     combined.my_labels.insert(current_depression);
@@ -422,7 +549,7 @@ fn find_depressions_to_fill<T: DemNum, W: DemNum>(
         || (this_dep.water_vol == this_dep.dep_vol
             && deps[this_dep.parent as usize].water_vol == 0.0)
     {
-        fill_depressions_fsm(
+        fill_depressions_fsm_with_topology(
             deps[combined.leaf_label as usize].pit_cell,
             deps[combined.top_label as usize].out_cell,
             &combined.my_labels,
@@ -430,6 +557,7 @@ fn find_depressions_to_fill<T: DemNum, W: DemNum>(
             topo,
             label,
             wtd,
+            topology,
         )?;
         Ok(SubtreeDepressionInfo::empty())
     } else {
@@ -449,13 +577,16 @@ pub fn fill_spill_merge<T: DemNum, W: DemNum>(
     deps: &mut DepressionHierarchy<T>,
     wtd: &mut Array2D<W>,
 ) -> Result<()> {
+    let topology = deps.first().map_or(Topology::D8, |d| d.topology);
+    validate_fsm_inputs(topo, label, flowdirs, deps, wtd, topology)?;
+
     reset_dh(deps);
-    move_water_into_pits(topo, label, flowdirs, deps, wtd);
+    move_water_into_pits_with_topology(topo, label, flowdirs, deps, wtd, topology);
 
     let mut jump_table = HashMap::<DhLabel, DhLabel>::new();
     move_water_in_dep_hier(OCEAN, deps, &mut jump_table);
     drop(jump_table);
 
-    find_depressions_to_fill(OCEAN, deps, topo, label, wtd)?;
+    find_depressions_to_fill(OCEAN, deps, topo, label, wtd, topology)?;
     Ok(())
 }

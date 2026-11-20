@@ -48,9 +48,9 @@ pub use array2d::{Array2D, DynamicArray2D, STANDARD_GEOTRANSFORM};
 pub use array3d::{Array3D, FLOW_PROPS_DEPTH};
 pub use constants::{
     ACCUM_NO_DATA, D4_EAST, D4_INVERSE, D4_NORTH, D4_SOUTH, D4_WEST, D4R, D4X, D4Y, D8_ARCGIS,
-    D8_EAST, D8_INVERSE, D8_NORTH, D8_SOUTH, D8_WEST, D8Flowdir, D8R, D8X, D8Y, DINF_NO_DATA, DR,
-    FLOWDIR_NO_DATA, Flowdir, HAS_FLOW_GEN, N4_DIAG, N8_DIAG, NO_DATA_GEN, NO_FLOW, NO_FLOW_GEN,
-    RICHDEM_FP_COMPARISON_ERROR, SQRT2, Topology, fp_eq, fp_ge, fp_le,
+    D8_EAST, D8_INVERSE, D8_NORTH, D8_SOUTH, D8_WEST, D8Flowdir, D8R, D8X, D8Y, DINF_NO_DATA,
+    DINF_NO_FLOW, DR, FLOWDIR_NO_DATA, Flowdir, HAS_FLOW_GEN, N4_DIAG, N8_DIAG, NO_DATA_GEN,
+    NO_FLOW, NO_FLOW_GEN, RICHDEM_FP_COMPARISON_ERROR, SQRT2, Topology, fp_eq, fp_ge, fp_le,
 };
 pub use depressions::{
     Depression, DepressionHierarchy, DhLabel, FlatIdx, LindsayMode, NO_DEP, NO_PARENT, NO_VALUE,

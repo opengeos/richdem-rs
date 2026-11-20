@@ -7,7 +7,7 @@
 use std::f64::consts::{PI, SQRT_2};
 
 use crate::array2d::Array2D;
-use crate::constants::{DINF_NO_DATA, NO_FLOW};
+use crate::constants::{DINF_NO_DATA, DINF_NO_FLOW};
 use crate::num::DemNum;
 
 /// Table 1 of Tarboton (1997): `e1` neighbor Y offsets.
@@ -84,7 +84,7 @@ fn dinf_flow_dir<T: DemNum>(elevations: &Array2D<T>, x: usize, y: usize) -> f32 
         let ni = nmax as usize;
         (AF[ni] * rmax + AC[ni] * PI / 2.0) as f32
     } else {
-        NO_FLOW as f32
+        DINF_NO_FLOW
     }
 }
 
@@ -92,7 +92,7 @@ fn dinf_flow_dir<T: DemNum>(elevations: &Array2D<T>, x: usize, y: usize) -> f32 
 pub fn dinf_flow_directions<T: DemNum>(elevations: &Array2D<T>) -> Array2D<f32> {
     let w = elevations.width();
     let h = elevations.height();
-    let mut flowdirs = Array2D::<f32>::make_from_template(elevations, NO_FLOW as f32);
+    let mut flowdirs = Array2D::<f32>::make_from_template(elevations, DINF_NO_FLOW);
     flowdirs.set_no_data(DINF_NO_DATA);
 
     for y in 0..h {

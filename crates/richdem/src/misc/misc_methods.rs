@@ -159,11 +159,13 @@ pub fn bucket_fill<T: DemNum, U: DemNum>(
     let dx = topo.dx();
     let dy = topo.dy();
     let nmax = topo.nmax();
+    let mut visited = vec![false; check_raster.size()];
 
     while let Some(c) = seeds.pop() {
-        if !check_raster.get_i(c).rd_eq(check_value) || set_raster.get_i(c).rd_eq(set_value) {
+        if c >= visited.len() || visited[c] || !check_raster.get_i(c).rd_eq(check_value) {
             continue;
         }
+        visited[c] = true;
         set_raster.set_i(c, set_value);
         let (cx, cy) = check_raster.i_to_xy(c);
         for n in 1..=nmax {
@@ -173,7 +175,7 @@ pub fn bucket_fill<T: DemNum, U: DemNum>(
                 continue;
             }
             let ni = check_raster.xy_to_i(nx as usize, ny as usize);
-            if check_raster.get_i(ni).rd_eq(check_value) && !set_raster.get_i(ni).rd_eq(set_value) {
+            if !visited[ni] && check_raster.get_i(ni).rd_eq(check_value) {
                 seeds.push(ni);
             }
         }

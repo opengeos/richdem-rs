@@ -78,54 +78,41 @@ pub fn d8_flow_accum<T: DemNum, U: DemNum>(flowdirs: &Array2D<T>) -> Array2D<U> 
 ///
 /// Output values: `1` = upslope cell, `2` = cell on initializing line, [`FLOWDIR_NO_DATA`] = other.
 pub fn d8_upslope_cells<T: DemNum>(
-    mut x0: i32,
-    mut y0: i32,
-    mut x1: i32,
-    mut y1: i32,
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
     flowdirs: &Array2D<T>,
 ) -> Array2D<u8> {
     let mut upslope = Array2D::<u8>::make_from_template(flowdirs, FLOWDIR_NO_DATA);
     upslope.set_no_data(FLOWDIR_NO_DATA);
     let mut expansion = VecDeque::<GridCell>::new();
 
-    if x0 > x1 {
-        std::mem::swap(&mut x0, &mut x1);
-        std::mem::swap(&mut y0, &mut y1);
-    }
+    // Integer Bresenham line algorithm handling shallow, steep, horizontal, and vertical segments.
+    let dx = (x1 - x0).abs();
+    let dy = -(y1 - y0).abs();
+    let sx = if x0 < x1 { 1 } else { -1 };
+    let sy = if y0 < y1 { 1 } else { -1 };
+    let mut err = dx + dy;
+    let mut x = x0;
+    let mut y = y0;
 
-    let deltax = x1 - x0;
-    let deltay = y1 - y0;
-    if deltax == 0 {
-        let step = if deltay >= 0 { 1 } else { -1 };
-        let mut y = y0;
-        loop {
-            if flowdirs.in_grid(x0, y) {
-                expansion.push_back(GridCell::new(x0, y));
-                upslope.set_xy(x0, y, 2);
-            }
-            if y == y1 {
-                break;
-            }
-            y += step;
+    loop {
+        if flowdirs.in_grid(x, y) && upslope.get_xy(x, y) != 2 {
+            expansion.push_back(GridCell::new(x, y));
+            upslope.set_xy(x, y, 2);
         }
-    } else {
-        let mut error = 0.0f32;
-        let deltaerr = ((deltay as f32) / (deltax as f32)).abs();
-        let mut y = y0;
-        for x in x0..=x1 {
-            if flowdirs.in_grid(x, y) {
-                expansion.push_back(GridCell::new(x, y));
-                upslope.set_xy(x, y, 2);
-            }
-            error += deltaerr;
-            if error >= 0.5 {
-                if flowdirs.in_grid(x + 1, y) {
-                    expansion.push_back(GridCell::new(x + 1, y));
-                    upslope.set_xy(x + 1, y, 2);
-                }
-                y += deltay.signum();
-                error -= 1.0;
-            }
+        if x == x1 && y == y1 {
+            break;
+        }
+        let e2 = 2 * err;
+        if e2 >= dy {
+            err += dy;
+            x += sx;
+        }
+        if e2 <= dx {
+            err += dx;
+            y += sy;
         }
     }
 

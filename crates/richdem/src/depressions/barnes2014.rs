@@ -49,6 +49,49 @@ fn seed_perimeter_pq<T: DemNum>(
     }
 }
 
+/// Seeds valid perimeter cells and valid cells adjacent to NoData, while marking
+/// all NoData cells as closed so they are never modified or treated as pits.
+fn seed_nodata_aware_pq<T: DemNum>(
+    elevations: &Array2D<T>,
+    open: &mut GridCellZPq<T>,
+    closed: &mut Array2D<u8>,
+    topo: Topology,
+) {
+    let w = elevations.width();
+    let h = elevations.height();
+    if w == 0 || h == 0 {
+        return;
+    }
+    let dx = topo.dx();
+    let dy = topo.dy();
+    let nmax = topo.nmax();
+    let nd = elevations.no_data();
+
+    for y in 0..h {
+        for x in 0..w {
+            let v = elevations.get(x, y);
+            if v.rd_eq(nd) {
+                closed.set(x, y, 1);
+                continue;
+            }
+            if elevations.is_edge_cell(x, y) {
+                open.push(GridCellZ::new(x as i32, y as i32, v));
+                closed.set(x, y, 1);
+                continue;
+            }
+            for n in 1..=nmax {
+                let nx = x as i32 + dx[n];
+                let ny = y as i32 + dy[n];
+                if elevations.in_grid(nx, ny) && elevations.get_xy(nx, ny).rd_eq(nd) {
+                    open.push(GridCellZ::new(x as i32, y as i32, v));
+                    closed.set(x, y, 1);
+                    break;
+                }
+            }
+        }
+    }
+}
+
 /// Returns `true` if `elevations` contains at least one depression under `topo`.
 pub fn has_depressions<T: DemNum>(elevations: &Array2D<T>, topo: Topology) -> bool {
     let dx = topo.dx();
@@ -57,7 +100,7 @@ pub fn has_depressions<T: DemNum>(elevations: &Array2D<T>, topo: Topology) -> bo
 
     let mut open = GridCellZPq::new();
     let mut closed = Array2D::<u8>::new(elevations.width(), elevations.height(), 0);
-    seed_perimeter_pq(elevations, &mut open, &mut closed);
+    seed_nodata_aware_pq(elevations, &mut open, &mut closed, topo);
 
     while let Some(c) = open.pop() {
         let cz = elevations.get_xy(c.x, c.y);
@@ -86,7 +129,7 @@ pub fn priority_flood_original<T: DemNum>(elevations: &mut Array2D<T>, topo: Top
 
     let mut open = GridCellZPq::new();
     let mut closed = Array2D::<u8>::new(elevations.width(), elevations.height(), 0);
-    seed_perimeter_pq(elevations, &mut open, &mut closed);
+    seed_nodata_aware_pq(elevations, &mut open, &mut closed, topo);
 
     while let Some(c) = open.pop() {
         let cz = elevations.get_xy(c.x, c.y);
@@ -113,7 +156,7 @@ pub fn priority_flood_barnes2014<T: DemNum>(elevations: &mut Array2D<T>, topo: T
     let mut open = GridCellZPq::new();
     let mut pit = VecDeque::<GridCellZ<T>>::new();
     let mut closed = Array2D::<u8>::new(elevations.width(), elevations.height(), 0);
-    seed_perimeter_pq(elevations, &mut open, &mut closed);
+    seed_nodata_aware_pq(elevations, &mut open, &mut closed, topo);
 
     while !open.is_empty() || !pit.is_empty() {
         let c = if let Some(p) = pit.pop_front() {
@@ -240,30 +283,50 @@ pub fn priority_flood_flowdirs_barnes2014<T: DemNum>(
     }
 
     for x in 0..w {
-        open.emplace(x as i32, 0, elevations.get(x, 0));
-        flowdirs.set(x, 0, 3);
+        let v = elevations.get(x, 0);
+        open.emplace(x as i32, 0, v);
+        if !v.rd_eq(elevations.no_data()) {
+            flowdirs.set(x, 0, 3);
+        }
         closed.set(x, 0, 1);
         if h > 1 {
-            open.emplace(x as i32, (h - 1) as i32, elevations.get(x, h - 1));
-            flowdirs.set(x, h - 1, 7);
+            let vb = elevations.get(x, h - 1);
+            open.emplace(x as i32, (h - 1) as i32, vb);
+            if !vb.rd_eq(elevations.no_data()) {
+                flowdirs.set(x, h - 1, 7);
+            }
             closed.set(x, h - 1, 1);
         }
     }
     for y in 1..h.saturating_sub(1) {
-        open.emplace(0, y as i32, elevations.get(0, y));
-        flowdirs.set(0, y, 1);
+        let vl = elevations.get(0, y);
+        open.emplace(0, y as i32, vl);
+        if !vl.rd_eq(elevations.no_data()) {
+            flowdirs.set(0, y, 1);
+        }
         closed.set(0, y, 1);
         if w > 1 {
-            open.emplace((w - 1) as i32, y as i32, elevations.get(w - 1, y));
-            flowdirs.set(w - 1, y, 5);
+            let vr = elevations.get(w - 1, y);
+            open.emplace((w - 1) as i32, y as i32, vr);
+            if !vr.rd_eq(elevations.no_data()) {
+                flowdirs.set(w - 1, y, 5);
+            }
             closed.set(w - 1, y, 1);
         }
     }
 
-    flowdirs.set(0, 0, 2);
-    flowdirs.set(w - 1, 0, 4);
-    flowdirs.set(0, h - 1, 8);
-    flowdirs.set(w - 1, h - 1, 6);
+    if !elevations.is_no_data(0, 0) {
+        flowdirs.set(0, 0, 2);
+    }
+    if !elevations.is_no_data(w - 1, 0) {
+        flowdirs.set(w - 1, 0, 4);
+    }
+    if !elevations.is_no_data(0, h - 1) {
+        flowdirs.set(0, h - 1, 8);
+    }
+    if !elevations.is_no_data(w - 1, h - 1) {
+        flowdirs.set(w - 1, h - 1, 6);
+    }
 
     const D8_ORDER: [usize; 9] = [0, 1, 3, 5, 7, 2, 4, 6, 8];
     let no_data = elevations.no_data();
@@ -359,7 +422,7 @@ pub fn priority_flood_watersheds_barnes2014<T: DemNum>(
     let mut labels = Array2D::<i32>::make_from_template(elevations, -1);
     labels.set_no_data(-1);
 
-    seed_perimeter_pq(elevations, &mut open, &mut closed);
+    seed_nodata_aware_pq(elevations, &mut open, &mut closed, topo);
 
     let mut clabel: i32 = 1;
     let no_data = elevations.no_data();
@@ -386,10 +449,13 @@ pub fn priority_flood_watersheds_barnes2014<T: DemNum>(
             if !elevations.in_grid(nx, ny) || closed.get_xy(nx, ny) != 0 {
                 continue;
             }
-            labels.set_xy(nx, ny, cur_label);
             closed.set_xy(nx, ny, 1);
 
             let nz = elevations.get_xy(nx, ny);
+            if nz.rd_eq(no_data) {
+                continue;
+            }
+            labels.set_xy(nx, ny, cur_label);
             if nz.rd_cmp(c.z) != std::cmp::Ordering::Greater {
                 if alter_elevations {
                     elevations.set_xy(nx, ny, c.z);
@@ -417,7 +483,7 @@ pub fn priority_flood_barnes2014_max_dep<T: DemNum>(
     let mut open = GridCellZPq::new();
     let mut pit = VecDeque::<GridCellZ<T>>::new();
     let mut closed = Array2D::<u8>::new(elevations.width(), elevations.height(), 0);
-    seed_perimeter_pq(elevations, &mut open, &mut closed);
+    seed_nodata_aware_pq(elevations, &mut open, &mut closed, topo);
 
     let mut dep_elev = T::ZERO;
     let mut dep_cells: Vec<GridCell> = Vec::new();

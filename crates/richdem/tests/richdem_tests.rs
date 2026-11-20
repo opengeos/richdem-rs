@@ -402,7 +402,7 @@ fn test_directions_match_expectations() {
 
 #[test]
 fn test_flow_accumulation_from_d8() {
-    let d8s = Array2D::from_rows(&[
+    let mut d8s = Array2D::from_rows(&[
         &[1, 1, 1, 1, 1, 1, 1],
         &[1, 1, 1, 1, 1, 1, 1],
         &[1, 1, 1, 1, 1, 1, 1],
@@ -410,6 +410,7 @@ fn test_flow_accumulation_from_d8() {
         &[1, 1, 1, 1, 1, 1, 1],
     ])
     .unwrap();
+    d8s.set_no_data(-1);
     let mut expected = Array2D::from_rows(&[
         &[0u32, 0, 0, 0, 0, 0, 0],
         &[0, 5, 4, 3, 2, 1, 0],
@@ -421,7 +422,7 @@ fn test_flow_accumulation_from_d8() {
     expected.set_no_data(ACCUM_NO_DATA as u32);
     assert_eq!(flow_accumulation_from_d8(&d8s), expected);
 
-    let snake = Array2D::from_rows(&[
+    let mut snake = Array2D::from_rows(&[
         &[0, 0, 0, 0, 0, 0, 0],
         &[0, 7, 1, 7, 1, 7, 0],
         &[0, 7, 3, 7, 3, 7, 0],
@@ -429,6 +430,7 @@ fn test_flow_accumulation_from_d8() {
         &[0, 0, 0, 0, 0, 0, 0],
     ])
     .unwrap();
+    snake.set_no_data(-1);
     let mut expected_snake = Array2D::from_rows(&[
         &[0u32, 0, 0, 0, 0, 0, 0],
         &[0, 13, 12, 7, 6, 1, 0],
@@ -439,6 +441,13 @@ fn test_flow_accumulation_from_d8() {
     .unwrap();
     expected_snake.set_no_data(ACCUM_NO_DATA as u32);
     assert_eq!(flow_accumulation_from_d8(&snake), expected_snake);
+
+    // Verify masked cells receive accum.no_data() (u32::MAX), not input sentinel (255)
+    let mut masked_d8 = Array2D::from_rows(&[&[255u8, 1, 1], &[1, 255, 1], &[1, 1, 1]]).unwrap();
+    masked_d8.set_no_data(255);
+    let masked_accum = flow_accumulation_from_d8(&masked_d8);
+    assert_eq!(masked_accum.get(0, 0), masked_accum.no_data());
+    assert_eq!(masked_accum.get(1, 1), masked_accum.no_data());
 }
 
 #[test]
@@ -542,13 +551,162 @@ fn test_flat_resolution_and_loop_check() {
 
 #[test]
 fn test_flowdir_conversions() {
-    let arc = Array2D::from_rows(&[&[0u8, 1, 2, 4, 8, 16, 32, 64, 128]]).unwrap();
+    let mut arc = Array2D::from_rows(&[&[0u8, 1, 2, 4, 8, 16, 32, 64, 128, 255]]).unwrap();
+    arc.set_no_data(255);
     let rd = convert_arc_flowdirs_to_richdem_d8(&arc).unwrap();
-    assert_eq!(rd.data(), &[0, 5, 6, 7, 8, 1, 2, 3, 4]);
+    assert_eq!(rd.no_data(), 255);
+    assert_eq!(rd.data(), &[0, 5, 6, 7, 8, 1, 2, 3, 4, 255]);
 
-    let td = Array2D::from_rows(&[&[0u8, 1, 2, 3, 4, 5, 6, 7, 8]]).unwrap();
+    let mut td = Array2D::from_rows(&[&[0u8, 1, 2, 3, 4, 5, 6, 7, 8, 255]]).unwrap();
+    td.set_no_data(255);
     let rd2 = convert_taudem_d8_to_richdem_d8(&td).unwrap();
-    assert_eq!(rd2.data(), &[0, 5, 4, 3, 2, 1, 8, 7, 6]);
+    assert_eq!(rd2.no_data(), 255);
+    assert_eq!(rd2.data(), &[0, 5, 4, 3, 2, 1, 8, 7, 6, 255]);
+
+    // Collision case: input NoData = 1 (collides with valid RichDEM direction 1)
+    let mut td_collide = Array2D::from_rows(&[&[1u8, 5]]).unwrap();
+    td_collide.set_no_data(1);
+    let rd_collide = convert_taudem_d8_to_richdem_d8(&td_collide).unwrap();
+    assert_eq!(rd_collide.no_data(), 255);
+    assert_eq!(rd_collide.data(), &[255, 1]);
+}
+
+#[test]
+fn test_prng_and_perlin_same_seed_reproducibility() {
+    seed_rand(12345);
+    let ints1: Vec<i32> = (0..16).map(|_| uniform_rand_int(-100, 100)).collect();
+    let reals1: Vec<f64> = (0..16).map(|_| uniform_rand_real(-5.0, 5.0)).collect();
+
+    seed_rand(12345);
+    let ints2: Vec<i32> = (0..16).map(|_| uniform_rand_int(-100, 100)).collect();
+    let reals2: Vec<f64> = (0..16).map(|_| uniform_rand_real(-5.0, 5.0)).collect();
+
+    assert_eq!(ints1, ints2);
+    assert_eq!(reals1, reals2);
+
+    let p1 = PerlinNoise::with_seed(9876);
+    let p2 = PerlinNoise::with_seed(9876);
+    for i in 0..10 {
+        let x = i as f64 * 0.37;
+        let y = i as f64 * 0.71;
+        assert_eq!(p1.noise(x, y, 0.5), p2.noise(x, y, 0.5));
+    }
+}
+
+#[test]
+fn test_review_regression_edge_cases() {
+    // 1. NoData preservation in has_depressions, Barnes2014, Zhou2016, watersheds, hierarchy
+    let mut nd_dem = Array2D::from_rows(&[
+        &[10.0f64, 10.0, 10.0],
+        &[10.0, -9999.0, 10.0],
+        &[10.0, 10.0, 10.0],
+    ])
+    .unwrap();
+    nd_dem.set_no_data(-9999.0);
+    assert!(!has_depressions(&nd_dem, Topology::D8));
+
+    let mut d1 = nd_dem.clone();
+    priority_flood_original(&mut d1, Topology::D8);
+    assert_eq!(d1.get(1, 1), -9999.0);
+
+    let mut d2 = nd_dem.clone();
+    priority_flood_barnes2014(&mut d2, Topology::D8);
+    assert_eq!(d2.get(1, 1), -9999.0);
+
+    let mut d3 = nd_dem.clone();
+    priority_flood_zhou2016(&mut d3);
+    assert_eq!(d3.get(1, 1), -9999.0);
+
+    let mut d4 = nd_dem.clone();
+    let ws = priority_flood_watersheds_barnes2014(&mut d4, true, Topology::D8);
+    assert_eq!(d4.get(1, 1), -9999.0);
+    assert_eq!(ws.get(1, 1), ws.no_data());
+
+    // 2. Tarboton angular proportioning: closer neighbor gets larger share
+    let mut tb_dem = Array2D::from_rows(&[
+        &[5.0f64, 20.0, 20.0],
+        &[6.0, 10.0, 20.0],
+        &[20.0, 20.0, 20.0],
+    ])
+    .unwrap();
+    tb_dem.set_no_data(-9999.0);
+    let props = fm_tarboton(&tb_dem);
+    assert!(props.get(1, 1, 1) > props.get(1, 1, 2)); // West > NW
+
+    // 3. D-infinity east (0.0) vs DINF_NO_FLOW (-2.0) + terminal cell local area
+    let mut east_dem =
+        Array2D::from_rows(&[&[3.0f64, 2.0, 1.0], &[3.0, 2.0, 1.0], &[3.0, 2.0, 1.0]]).unwrap();
+    east_dem.set_no_data(-9999.0);
+    let dinf_fds = dinf_flow_directions(&east_dem);
+    assert_eq!(dinf_fds.get(1, 1), 0.0);
+    let dinf_area = dinf_upslope_area::<f32, f64>(&dinf_fds);
+    assert!(dinf_area.get(2, 1) >= 2.0);
+
+    let mut single = Array2D::from_rows(&[&[DINF_NO_FLOW]]).unwrap();
+    single.set_no_data(DINF_NO_DATA);
+    let single_area = dinf_upslope_area::<f32, f64>(&single);
+    assert_eq!(single_area.get(0, 0), 1.0);
+
+    // 4. Rectangular-cell curvature uses both dx and dy
+    let mut rect =
+        Array2D::from_rows(&[&[4.0f64, 4.0, 4.0], &[0.0, 0.0, 0.0], &[4.0, 4.0, 4.0]]).unwrap();
+    rect.set_no_data(-9999.0);
+    rect.geotransform = [0.0, 1.0, 0.0, 6.0, 0.0, -2.0];
+    let curv = ta_curvature(&rect, 1.0);
+    assert!((curv.get(1, 1) - (-200.0)).abs() < 1e-4);
+
+    // 5. Steep Bresenham line in d8_upslope_cells includes both endpoints
+    let fds = Array2D::new(4, 6, 0u8);
+    let up = d8_upslope_cells(1, 1, 2, 5, &fds);
+    assert_eq!(up.get(1, 1), 2);
+    assert_eq!(up.get(2, 5), 2);
+
+    // 6. DisjointDenseIntSet::merge_a_into_b cannot create cycles
+    let mut dsu = DisjointDenseIntSet::with_size(2);
+    dsu.merge_a_into_b(0, 1);
+    dsu.merge_a_into_b(1, 0);
+    assert!(dsu.same_set(0, 1));
+
+    // 7. bucket_fill traverses across cells already set to set_value
+    let check = Array2D::from_rows(&[&[2u8, 2, 2]]).unwrap();
+    let mut set = Array2D::from_rows(&[&[0u8, 4, 0]]).unwrap();
+    let mut seeds = vec![0usize];
+    bucket_fill(&check, &mut set, 2, 4, &mut seeds, Topology::D8).unwrap();
+    assert_eq!(set.data(), &[4, 4, 4]);
+
+    // 8. Exact u64/i64 values > 2^53 preserved across cast and GeoTIFF I/O
+    let big_u64: u64 = 9_007_199_254_740_993;
+    let mut u64_arr = Array2D::from_rows(&[&[big_u64, big_u64 + 2]]).unwrap();
+    u64_arr.set_no_data(u64::MAX);
+    let i64_arr = u64_arr.cast::<i64>();
+    assert_eq!(i64_arr.get(0, 0), big_u64 as i64);
+
+    let tmp = tempfile::tempdir().unwrap();
+    let u64_path = tmp.path().join("u64_big.tif");
+    save_raster(&u64_arr, &u64_path, None, false).unwrap();
+    let u64_loaded = load_raster::<u64>(&u64_path, None).unwrap();
+    assert_eq!(u64_loaded.get(0, 0), big_u64);
+    assert_eq!(u64_loaded.get(1, 0), big_u64 + 2);
+
+    // 9. Boundary cells with outgoing flow in generic flow_accumulation
+    let mut bprops = Array3D::<f32>::new(3, 1, NO_FLOW_GEN);
+    bprops.set_no_data(NO_DATA_GEN);
+    bprops.set(2, 0, 0, HAS_FLOW_GEN);
+    bprops.set(2, 0, 1, 1.0); // West
+    bprops.set(1, 0, 0, HAS_FLOW_GEN);
+    bprops.set(1, 0, 1, 1.0); // West
+    let mut baccum = Array2D::new(3, 1, 1.0f64);
+    flow_accumulation(&bprops, &mut baccum).unwrap();
+    assert_eq!(baccum.data(), &[3.0, 2.0, 1.0]);
+
+    // 10. All-ocean 2x2 hierarchy succeeds
+    let ocean_dem = Array2D::new(2, 2, -1.0f64);
+    let mut ocean_lbl = get_new_depression_hierarchy_labels(2, 2, None);
+    let mut ocean_fds = Array2D::new(2, 2, 5i8);
+    let ocean_dh =
+        get_depression_hierarchy(&ocean_dem, &mut ocean_lbl, &mut ocean_fds, Topology::D8).unwrap();
+    assert_eq!(ocean_dh.len(), 1);
+    assert!(ocean_fds.data().iter().all(|&d| d == NO_FLOW));
 }
 
 #[test]
