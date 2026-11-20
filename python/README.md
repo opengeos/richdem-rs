@@ -1,6 +1,6 @@
 # richdem-rs (Python)
 
-[![PyPI](https://img.shields.io/pypi/v/richdem-rs.svg)](https://pypi.org/project/richdem-rs/)
+[![PyPI](https://img.shields.io/pypi/v/richdem-rs)](https://pypi.org/project/richdem-rs/)
 [![crates.io](https://img.shields.io/crates/v/richdem.svg)](https://crates.io/crates/richdem)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/opengeos/richdem-rs/blob/main/examples/richdem_rs_demo.ipynb)
 

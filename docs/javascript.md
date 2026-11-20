@@ -90,7 +90,7 @@ try {
 | `generatePerlinDem` | `(size, seed, reliefM, cellSizeM)` | `Uint8Array` — synthetic Perlin-noise GeoTIFF DEM |
 | `hillshadeRgba` | `(bytes, filename, azimuthDeg, elevationDeg, zFactor)` | `Uint8Array` — `width × height × 4` shaded hypsometric relief RGBA pixels |
 | `fillDepressions` | `(bytes, filename, epsilon, topology)` | `RasterOutput` (`width`, `height`, `min`, `max`, `modifiedCells`, `projection`, `tifBytes()`, `rgba()`, `diffRgba()`) |
-| `breachDepressions` | `(bytes, filename, mode, maxPathLen, maxDepth, epsGradients, fillRemaining)` | `RasterOutput` (`mode`: `"complete"`, `"selective"`, or `"constrained"`) |
+| `breachDepressions` | `(bytes, filename, mode, maxPathLen, maxDepth, epsGradients, fillRemaining)` | `RasterOutput` (`mode`: `"complete"`, `"selective"`, or `"constrained"`; `0` for `maxPathLen` or `maxDepth` means unlimited) |
 | `resolveFlats` | `(bytes, filename, method)` | `RasterOutput` (`method`: `"epsilon"`, `"barnes"`, or `"garbrecht"`) |
 | `flowAccumulation` | `(bytes, filename, method, exponent, prefill, logPreview)` | `RasterOutput` (`method`: `Dinf`, `D8`, `D4`, `Quinn`, `Holmgren`, `Freeman`, `Rho8`, `Rho4`) |
 | `terrainAttribute` | `(bytes, filename, attrib, zScale)` | `RasterOutput` (`slope_degrees`, `slope_percentage`, `slope_riserun`, `slope_radians`, `aspect`, `curvature`, `planform_curvature`, `profile_curvature`, `spi`, `cti`) |

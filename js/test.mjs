@@ -39,10 +39,12 @@ const filledInfo = JSON.parse(richdem.rasterInfo(filledBytes, "filled.tif"));
 assert.equal(filledInfo.has_depressions, false);
 filled.free();
 
-// 4. Lindsay (2016) breaching
-const breached = richdem.breachDepressions(demBytes, "perlin.tif", "complete", 0, 0, true, false);
-assert.ok(breached.modifiedCells > 0);
-breached.free();
+// 4. Lindsay (2016) breaching (complete, selective, constrained; 0 = unlimited limits)
+for (const mode of ["complete", "selective", "constrained"]) {
+  const breached = richdem.breachDepressions(demBytes, "perlin.tif", mode, 0, 0, true, false);
+  assert.ok(breached.modifiedCells > 0, `expected modifiedCells > 0 for breach mode ${mode}`);
+  breached.free();
+}
 
 // 5. Flat resolution
 const resolved = richdem.resolveFlats(filledBytes, "filled.tif", "epsilon");

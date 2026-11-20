@@ -2,7 +2,9 @@
 //!
 //! Thin marshalling layer operating completely in memory on GeoTIFF / AAIGrid byte buffers
 //! (`Uint8Array`) with zero filesystem or GDAL dependencies, for browsers and Node.js.
-//! Core hydrologic algorithms live in `crates/richdem`.
+//! Port of [RichDEM](https://github.com/r-barnes/richdem) by Richard Barnes (GPL-3.0-only);
+//! see `NOTICE` for original algorithm authors and publications. Core hydrologic algorithms
+//! live in `crates/richdem`.
 
 use serde::Serialize;
 use terrio::RasterWriteOptions;
@@ -465,7 +467,7 @@ fn diff_and_count(orig: &Array2D<f64>, modified: &Array2D<f64>) -> (Array2D<f64>
                 0.0
             } else {
                 let d = (b - a).abs();
-                if d > 1e-12 {
+                if a != b {
                     count += 1;
                 }
                 d
@@ -514,6 +516,9 @@ pub fn fill_depressions(
 }
 
 /// Breaches depressions in a DEM using Lindsay (2016) complete, selective, or constrained breaching.
+///
+/// Passing `max_path_len = 0` means unlimited path length (`u32::MAX`); passing `max_depth <= 0`
+/// (or non-finite) means unlimited breach depth (`1e30`, matching `richdem-cli`).
 #[wasm_bindgen(js_name = breachDepressions)]
 #[allow(clippy::too_many_arguments)]
 pub fn breach_depressions(
@@ -535,6 +540,16 @@ pub fn breach_depressions(
             )));
         }
     };
+    let eff_max_path_len = if max_path_len == 0 {
+        u32::MAX
+    } else {
+        max_path_len
+    };
+    let eff_max_depth = if max_depth.is_finite() && max_depth > 0.0 {
+        max_depth
+    } else {
+        1e30
+    };
     let orig = read_array2d_f64(bytes, filename)?;
     let mut dem = orig.clone();
     lindsay2016(
@@ -542,8 +557,8 @@ pub fn breach_depressions(
         lindsay_mode,
         eps_gradients,
         fill_remaining,
-        max_path_len,
-        max_depth,
+        eff_max_path_len,
+        eff_max_depth,
     )
     .map_err(to_js_err)?;
     let (diff, modified_cells) = diff_and_count(&orig, &dem);
@@ -621,7 +636,14 @@ pub fn flow_accumulation(
     let fa_method = FlowAccumMethod::parse(method).map_err(to_js_err)?;
     let mut dem = read_array2d_f64(bytes, filename)?;
     if prefill {
-        core_fill_depressions_epsilon(&mut dem, Topology::D8).map_err(to_js_err)?;
+        let prefill_topo = match fa_method {
+            FlowAccumMethod::D4
+            | FlowAccumMethod::OCallaghanD4
+            | FlowAccumMethod::Rho4
+            | FlowAccumMethod::FairfieldLeymarieD4 => Topology::D4,
+            _ => Topology::D8,
+        };
+        core_fill_depressions_epsilon(&mut dem, prefill_topo).map_err(to_js_err)?;
     }
     let mut accum = Array2D::make_from_template(&dem, 1.0f64);
     let exp_opt = if exponent.is_finite() && exponent > 0.0 {
@@ -807,10 +829,13 @@ pub fn depression_hierarchy_fsm(
 
     let mut wtd = Array2D::<f64>::make_from_template(&dem, water_depth);
     wtd.set_no_data(-1.0);
-    // Keep ocean boundary cells dry so standing water exits at the DEM boundary.
+    // Keep ocean boundary, NoData, and non-finite cells dry so water exits cleanly at boundaries
+    // and never accumulates on missing terrain.
     for y in 0..h {
         for x in 0..w {
-            if dem.is_no_data(x, y) || labels.get(x, y) == OCEAN {
+            let z = dem.get(x, y);
+            let lbl = labels.get(x, y);
+            if dem.is_no_data(x, y) || !z.is_finite() || lbl == OCEAN || lbl == NO_VALUE {
                 wtd.set(x, y, 0.0);
             }
         }
@@ -818,12 +843,23 @@ pub fn depression_hierarchy_fsm(
 
     fill_spill_merge(&dem, &labels, &flowdirs, &mut deps, &mut wtd).map_err(to_js_err)?;
 
+    // Restore NoData sentinel on missing input terrain cells while keeping valid dry terrain at 0.0.
+    let wtd_nd = wtd.no_data();
+    for y in 0..h {
+        for x in 0..w {
+            let z = dem.get(x, y);
+            if dem.is_no_data(x, y) || !z.is_finite() {
+                wtd.set(x, y, wtd_nd);
+            }
+        }
+    }
+
     let cell_area = dem.get_cell_area();
     let mut inundated_cells = 0usize;
     let mut max_water_depth = 0.0f64;
     let mut total_water_volume = 0.0f64;
     for &d in wtd.data() {
-        if d.is_finite() && d > 1e-9 {
+        if d.is_finite() && !d.rd_eq(wtd_nd) && d > 1e-9 {
             inundated_cells += 1;
             if d > max_water_depth {
                 max_water_depth = d;

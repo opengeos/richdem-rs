@@ -154,6 +154,8 @@
 
   function syncWorkflowFields() {
     const wf = $("rp-workflow").value;
+    const depMethod = $("rp-dep-method").value;
+    const isBreach = wf === "depressions" && depMethod.startsWith("breach_");
     document.querySelectorAll("#richdem-playground .rp-dep-only").forEach((el) => {
       el.hidden = wf !== "depressions";
     });
@@ -167,7 +169,7 @@
       el.hidden = wf !== "overview" && wf !== "fsm";
     });
     document.querySelectorAll("#richdem-playground .rp-topo-only").forEach((el) => {
-      el.hidden = wf !== "overview" && wf !== "fsm" && wf !== "depressions";
+      el.hidden = (wf !== "overview" && wf !== "fsm" && wf !== "depressions") || isBreach;
     });
   }
 
@@ -176,10 +178,12 @@
     const token = ++runToken;
     const wf = $("rp-workflow").value;
     const topo = $("rp-topo").value;
-    const waterDepth = Math.max(0.0, parseFloat($("rp-water-depth").value) || 1.5);
+    const rawDepth = parseFloat($("rp-water-depth").value);
+    const waterDepth = Number.isFinite(rawDepth) ? Math.min(Math.max(rawDepth, 0.05), 50) : 1.5;
     const depMethod = $("rp-dep-method").value;
     const flowMethod = $("rp-flow-method").value;
-    const exponent = parseFloat($("rp-exponent").value) || 1.1;
+    const rawExp = parseFloat($("rp-exponent").value);
+    const exponent = Number.isFinite(rawExp) && rawExp > 0 ? rawExp : 1.1;
     const attrib = $("rp-attrib").value;
 
     const runBtn = $("rp-run");
@@ -279,7 +283,17 @@
             out = wasm.fillDepressions(loadedFile.bytes, loadedFile.name, false, topo);
           } else {
             const mode = depMethod.replace("breach_", "");
-            out = wasm.breachDepressions(loadedFile.bytes, loadedFile.name, mode, 0, 0, true, false);
+            const maxPath = mode === "complete" ? 0 : 25;
+            const maxDepth = mode === "complete" ? 0 : 15.0;
+            out = wasm.breachDepressions(
+              loadedFile.bytes,
+              loadedFile.name,
+              mode,
+              maxPath,
+              maxDepth,
+              true,
+              false,
+            );
           }
           panels.push(
             { title: "Conditioned DEM (Shaded Relief)", width: w, height: h, rgba: out.rgba() },
@@ -440,6 +454,7 @@
       syncWorkflowFields();
       if (loadedFile) runAnalysis();
     });
+    $("rp-dep-method").addEventListener("change", syncWorkflowFields);
     $("rp-run").addEventListener("click", runAnalysis);
     $("rp-water-slider").addEventListener("input", (e) => {
       const v = parseFloat(e.target.value);
