@@ -679,6 +679,17 @@ fn test_tarboton_and_dinf_flow_direction_edge_cases() {
     nd_neighbor_dem.set_no_data(-9999.0);
     assert_eq!(d8_flow_directions(&nd_neighbor_dem).get(1, 1), 5); // East (only lower valid neighbor)
     assert_eq!(dinf_flow_directions(&nd_neighbor_dem).get(1, 1), 0.0); // East (0 radians)
+
+    // Non-NoData NaN center cell is masked as NoData in both D8 and Dinf
+    let mut nan_center = Array2D::from_rows(&[
+        &[10.0f64, 10.0, 10.0],
+        &[10.0, f64::NAN, 10.0],
+        &[10.0, 10.0, 10.0],
+    ])
+    .unwrap();
+    nan_center.set_no_data(-9999.0);
+    assert_eq!(d8_flow_directions(&nan_center).get(1, 1), FLOWDIR_NO_DATA);
+    assert_eq!(dinf_flow_directions(&nan_center).get(1, 1), DINF_NO_DATA);
 }
 
 #[test]

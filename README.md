@@ -146,7 +146,7 @@ Measured via [`scripts/benchmark.py`](scripts/benchmark.py) on identical `float6
 | `TerrainAttribute` (`slope_degrees`) | 44.7 ms | **14.0 ms** | **3.19×** | `0.00e+00` |
 | `TerrainAttribute` (`curvature`) | 20.6 ms | **14.5 ms** | **1.42×** | `0.00e+00` |
 
-> *Note on `Dinf` `Max |diff|`:* `Dinf` flow proportions are stored in `f32`, so tiny `atan2` ULP rounding differences compound slightly along long upstream drainage paths (relative error `< 1e-6` on outlet accumulations of ~10⁵–10⁶ cells). All other methods match C++ `richdem2` bit-for-bit (`0.00e+00`).
+> *Note on `Dinf` `Max |diff|`:* `Dinf` flow proportions are stored in `f32`, so tiny `atan2` ULP rounding differences compound slightly along long upstream drainage paths (relative error ~10⁻⁶ on outlet accumulations of ~10⁵–10⁶ cells). All other methods match C++ `richdem2` bit-for-bit (`0.00e+00`).
 
 ### Pure Rust Native Throughput
 

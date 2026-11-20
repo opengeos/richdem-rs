@@ -572,6 +572,11 @@ impl<T: DemNum> Array2D<T> {
 
     /// Converts all pixel values to another `DemNum` type, preserving geospatial metadata
     /// and the NoData mask without passing integer-to-integer conversions through `f64`.
+    ///
+    /// If the converted NoData sentinel collides with a valid pixel, an unused target sentinel is
+    /// selected automatically; if the entire probe range of a small integer target (e.g. all 256
+    /// values of `u8`) is occupied by valid data, no free sentinel exists and the best-effort
+    /// converted sentinel is retained.
     pub fn cast<U: DemNum>(&self) -> Array2D<U> {
         let mut converted_nd = if !T::IS_FLOAT && !U::IS_FLOAT {
             U::from_nodata_i128(self.no_data.to_i128())

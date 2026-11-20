@@ -620,33 +620,70 @@ fn run() -> richdem::Result<()> {
             if a.projection() != b.projection() {
                 println!("Projection differs");
             }
-            let fa = a.to_f64();
-            let fb = b.to_f64();
+            let int_cell = |arr: &DynamicArray2D, i: usize| -> Option<(i128, bool)> {
+                match arr {
+                    DynamicArray2D::U8(v) => Some((v.get_i(i) as i128, v.is_no_data_i(i))),
+                    DynamicArray2D::I8(v) => Some((v.get_i(i) as i128, v.is_no_data_i(i))),
+                    DynamicArray2D::U16(v) => Some((v.get_i(i) as i128, v.is_no_data_i(i))),
+                    DynamicArray2D::I16(v) => Some((v.get_i(i) as i128, v.is_no_data_i(i))),
+                    DynamicArray2D::U32(v) => Some((v.get_i(i) as i128, v.is_no_data_i(i))),
+                    DynamicArray2D::I32(v) => Some((v.get_i(i) as i128, v.is_no_data_i(i))),
+                    DynamicArray2D::U64(v) => Some((v.get_i(i) as i128, v.is_no_data_i(i))),
+                    DynamicArray2D::I64(v) => Some((v.get_i(i) as i128, v.is_no_data_i(i))),
+                    DynamicArray2D::F32(_) | DynamicArray2D::F64(_) => None,
+                }
+            };
+            let both_int = !matches!(a, DynamicArray2D::F32(_) | DynamicArray2D::F64(_))
+                && !matches!(b, DynamicArray2D::F32(_) | DynamicArray2D::F64(_));
             let mut max_diff = 0.0f64;
             let mut min_diff = f64::INFINITY;
             let mut sum_abs = 0.0f64;
             let mut sum_sq = 0.0f64;
             let mut count = 0usize;
             let mut validity_mismatch = 0usize;
-            for i in 0..fa.size() {
-                let va = fa.get_i(i);
-                let vb = fb.get_i(i);
-                let a_missing = fa.is_no_data_i(i) || va.is_nan();
-                let b_missing = fb.is_no_data_i(i) || vb.is_nan();
-                match (a_missing, b_missing) {
-                    (true, true) => continue,
-                    (true, false) | (false, true) => {
-                        validity_mismatch += 1;
-                        continue;
+            if both_int {
+                let n = a.width() * a.height();
+                for i in 0..n {
+                    let (va, a_missing) = int_cell(&a, i).unwrap();
+                    let (vb, b_missing) = int_cell(&b, i).unwrap();
+                    match (a_missing, b_missing) {
+                        (true, true) => continue,
+                        (true, false) | (false, true) => {
+                            validity_mismatch += 1;
+                            continue;
+                        }
+                        (false, false) => {}
                     }
-                    (false, false) => {}
+                    let d = va.abs_diff(vb) as f64;
+                    max_diff = max_diff.max(d);
+                    min_diff = min_diff.min(d);
+                    sum_abs += d;
+                    sum_sq += d * d;
+                    count += 1;
                 }
-                let d = if va == vb { 0.0 } else { (va - vb).abs() };
-                max_diff = max_diff.max(d);
-                min_diff = min_diff.min(d);
-                sum_abs += d;
-                sum_sq += d * d;
-                count += 1;
+            } else {
+                let fa = a.to_f64();
+                let fb = b.to_f64();
+                for i in 0..fa.size() {
+                    let va = fa.get_i(i);
+                    let vb = fb.get_i(i);
+                    let a_missing = fa.is_no_data_i(i) || va.is_nan();
+                    let b_missing = fb.is_no_data_i(i) || vb.is_nan();
+                    match (a_missing, b_missing) {
+                        (true, true) => continue,
+                        (true, false) | (false, true) => {
+                            validity_mismatch += 1;
+                            continue;
+                        }
+                        (false, false) => {}
+                    }
+                    let d = if va == vb { 0.0 } else { (va - vb).abs() };
+                    max_diff = max_diff.max(d);
+                    min_diff = min_diff.min(d);
+                    sum_abs += d;
+                    sum_sq += d * d;
+                    count += 1;
+                }
             }
             if count == 0 {
                 min_diff = 0.0;

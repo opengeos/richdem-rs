@@ -62,7 +62,9 @@ pub fn d8_flow_directions<T: DemNum>(elevations: &Array2D<T>) -> Array2D<D8Flowd
 
     for y in 0..h {
         for x in 0..w {
-            if elevations.is_no_data(x, y) {
+            if elevations.is_no_data(x, y)
+                || (T::IS_FLOAT && !elevations.get(x, y).to_f64().is_finite())
+            {
                 flowdirs.set(x, y, FLOWDIR_NO_DATA);
             } else {
                 flowdirs.set(x, y, d8_flow_dir(elevations, x, y));
