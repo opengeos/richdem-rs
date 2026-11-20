@@ -285,9 +285,15 @@ def FlowAccumFromProps(
     weights: rdarray | None = None,
     in_place: bool = False,
 ) -> rdarray:
-    """Calculates flow accumulation from 3D flow proportions."""
+    """Calculates flow accumulation from 3D flow proportions.
+
+    If `in_place=True`, `weights` must be provided as a floating-point `rdarray`
+    and is updated in place (with `weights.no_data` set to `-1`).
+    """
     if not isinstance(props, rd3array):
         raise TypeError("A richdem_rs.rd3array is required!")
+    if in_place and weights is None:
+        raise ValueError("FlowAccumFromProps(in_place=True) requires `weights`")
     if (
         weights is not None
         and in_place
@@ -324,9 +330,15 @@ def FlowAccumulation(
     weights: rdarray | None = None,
     in_place: bool = False,
 ) -> rdarray:
-    """Calculates flow accumulation using any RichDEM flow routing method."""
+    """Calculates flow accumulation using any RichDEM flow routing method.
+
+    If `in_place=True`, `weights` must be provided as a floating-point `rdarray`
+    and is updated in place (with `weights.no_data` set to `-1`).
+    """
     if not isinstance(dem, rdarray):
         raise TypeError("A richdem_rs.rdarray is required!")
+    if in_place and weights is None:
+        raise ValueError("FlowAccumulation(in_place=True) requires `weights`")
     if (
         weights is not None
         and in_place
@@ -381,10 +393,10 @@ def generate_perlin_terrain(size: int, seed: int) -> rdarray:
 
 def get_new_depression_hierarchy_labels(
     shape: tuple[int, int],
-    no_data: float = -9999,
+    no_data: int = depression_hierarchy.NO_DEP,
     geotransform: np.ndarray | None = None,
 ) -> rdarray:
-    """Creates a labels array with OCEAN on borders and NO_DEP in the interior."""
+    """Creates a `uint32` labels array with OCEAN on borders and NO_DEP in the interior."""
     gt = geotransform if geotransform is not None else STANDARD_GEOTRANSFORM
     arr = np.full(shape, depression_hierarchy.OCEAN, dtype=np.uint32)
     arr[1:-1, 1:-1] = depression_hierarchy.NO_DEP

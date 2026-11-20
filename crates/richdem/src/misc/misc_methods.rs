@@ -17,14 +17,19 @@ pub fn dem_surface_area<T: DemNum>(elevations: &Array2D<T>, zscale: f64) -> Resu
     let planar_diag_dist = xdist.hypot(ydist);
     let cell_planar_area = elevations.get_cell_area();
     let mut area = 0.0f64;
+    let mut valid_cells = 0usize;
 
     for y in 0..elevations.height() {
         for x in 0..elevations.width() {
             if elevations.is_no_data(x, y) {
                 continue;
             }
-            let mut cell_area = 0.0f64;
             let my_elev = zscale * elevations.get(x, y).to_f64();
+            if !my_elev.is_finite() {
+                continue;
+            }
+            valid_cells += 1;
+            let mut cell_area = 0.0f64;
 
             for (n, &is_diag) in N8_DIAG.iter().enumerate().skip(1) {
                 let nn = if n == 8 { 1 } else { n + 1 };
@@ -34,7 +39,8 @@ pub fn dem_surface_area<T: DemNum>(elevations: &Array2D<T>, zscale: f64) -> Resu
                 let dny = y as i32 + D8Y[dn];
                 let dn_elev = if elevations.in_grid(dnx, dny) && !elevations.is_no_data_xy(dnx, dny)
                 {
-                    zscale * elevations.get_xy(dnx, dny).to_f64()
+                    let v = zscale * elevations.get_xy(dnx, dny).to_f64();
+                    if v.is_finite() { v } else { my_elev }
                 } else {
                     my_elev
                 };
@@ -43,7 +49,8 @@ pub fn dem_surface_area<T: DemNum>(elevations: &Array2D<T>, zscale: f64) -> Resu
                 let ndny = y as i32 + D8Y[ndn];
                 let ndn_elev =
                     if elevations.in_grid(ndnx, ndny) && !elevations.is_no_data_xy(ndnx, ndny) {
-                        zscale * elevations.get_xy(ndnx, ndny).to_f64()
+                        let v = zscale * elevations.get_xy(ndnx, ndny).to_f64();
+                        if v.is_finite() { v } else { my_elev }
                     } else {
                         my_elev
                     };
@@ -81,7 +88,7 @@ pub fn dem_surface_area<T: DemNum>(elevations: &Array2D<T>, zscale: f64) -> Resu
         }
     }
 
-    let dem_planar_area = (elevations.num_data_cells() as f64) * cell_planar_area;
+    let dem_planar_area = (valid_cells as f64) * cell_planar_area;
     Ok(area.max(dem_planar_area))
 }
 

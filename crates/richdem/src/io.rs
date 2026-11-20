@@ -14,13 +14,18 @@ use crate::array2d::{Array2D, DynamicArray2D};
 use crate::error::{Error, Result};
 use crate::num::DemNum;
 
+fn path_to_utf8(path: &Path) -> Result<&str> {
+    path.to_str()
+        .ok_or_else(|| Error::InvalidArgument(format!("non-UTF-8 path: {}", path.display())))
+}
+
 /// Opens a raster file with `terrio` (falling back to RichDEM's ESRI ASCII Grid parser
 /// for custom extensions such as `.dem`, `.d8`, `.out`), returning a [`DynamicArray2D`].
 pub fn load_dynamic(path: impl AsRef<Path>) -> Result<DynamicArray2D> {
     let path = path.as_ref();
-    let path_str = path.to_string_lossy();
-    match terrio::open_raster(&path_str) {
-        Ok(ds) => dataset_to_dynamic(ds, &path_str),
+    let path_str = path_to_utf8(path)?;
+    match terrio::open_raster(path_str) {
+        Ok(ds) => dataset_to_dynamic(ds, path_str),
         Err(terrio_err) => {
             // Fall back to direct ESRI ASCII Grid parsing for RichDEM test fixtures
             // with extensions like `.dem`, `.d8`, `.out`.
@@ -43,11 +48,11 @@ pub fn load_raster<T: DemNum>(
     override_no_data: Option<T>,
 ) -> Result<Array2D<T>> {
     let path = path.as_ref();
-    let path_str = path.to_string_lossy();
+    let path_str = path_to_utf8(path)?;
 
-    let mut arr = match terrio::open_raster(&path_str) {
+    let mut arr = match terrio::open_raster(path_str) {
         Ok(ds) => {
-            let dyn_arr = dataset_to_dynamic(ds, &path_str)?;
+            let dyn_arr = dataset_to_dynamic(ds, path_str)?;
             dynamic_cast::<T>(dyn_arr)
         }
         Err(terrio_err) => match Array2D::<T>::load_ascii_grid(path) {
@@ -130,7 +135,8 @@ pub fn save_raster<T: DemNum>(
     if compress {
         opts.compression = Some("DEFLATE".into());
     }
-    terrio::write_raster_dataset(&ds, &path.to_string_lossy(), &opts)?;
+    let path_str = path_to_utf8(path)?;
+    terrio::write_raster_dataset(&ds, path_str, &opts)?;
     Ok(())
 }
 
