@@ -37,7 +37,7 @@ Full API rustdocs are published automatically on [docs.rs/richdem](https://docs.
 ```toml
 [dependencies]
 # Core algorithms + rayon parallelism, without raster I/O
-richdem = { version = "0.1", default-features = false, features = ["parallel"] }
+richdem = { version = "0.2", default-features = false, features = ["parallel"] }
 ```
 
 ```rust

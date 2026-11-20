@@ -16,7 +16,7 @@ To compile a strictly single-threaded Rust binary without `rayon`:
 
 ```toml
 [dependencies]
-richdem = { version = "0.1", default-features = false, features = ["terrio"] }
+richdem = { version = "0.2", default-features = false, features = ["terrio"] }
 ```
 
 ## Determinism
