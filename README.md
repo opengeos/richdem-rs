@@ -1,6 +1,7 @@
 # richdem-rs
 
 [![CI](https://github.com/opengeos/richdem-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/opengeos/richdem-rs/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/badge/docs-richdem--rs.opengeos.org-teal.svg)](https://richdem-rs.opengeos.org)
 [![crates.io](https://img.shields.io/crates/v/richdem.svg)](https://crates.io/crates/richdem)
 [![PyPI](https://img.shields.io/pypi/v/richdem-rs.svg)](https://pypi.org/project/richdem-rs/)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/opengeos/richdem-rs/blob/main/examples/richdem_rs_demo.ipynb)
