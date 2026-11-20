@@ -26,13 +26,13 @@ Pass any of the following method names to `FlowAccumulation` (Python), `FlowAccu
 
 | Method Name | Aliases | Author(s) | Type | Exponent |
 |---|---|---|---|---|
-| `D8` | `O'Callaghan` | O'Callaghan & Mark (1984) | Single-flow (8-way) | — |
-| `D4` | — | O'Callaghan & Mark (1984) | Single-flow (4-way) | — |
-| `Dinf` | `Tarboton` | Tarboton (1997) | Continuous angle (2-way split) | — |
+| `D8` | `OCallaghan`, `OCallaghanD8` | O'Callaghan & Mark (1984) | Single-flow (8-way) | — |
+| `D4` | `OCallaghanD4` | O'Callaghan & Mark (1984) | Single-flow (4-way) | — |
+| `Dinf` | `Tarboton`, `Dinfinity` | Tarboton (1997) | Continuous angle (2-way split) | — |
 | `Quinn` | — | Quinn et al. (1991) | Multiple-flow (MFD, linear) | — |
 | `Holmgren` | — | Holmgren (1994) | Multiple-flow (MFD, power) | Required (`x > 0`, e.g. `4.0`) |
 | `Freeman` | — | Freeman (1991) | Multiple-flow (MFD, power) | Required (`x > 0`, e.g. `1.1`) |
-| `Rho8` | `FairfieldLeymarieD8` | Fairfield & Leymarie (1991) | Stochastic single-flow (8-way) | — |
+| `Rho8` | `FairfieldLeymarieD8`, `FairfieldLeymarie` | Fairfield & Leymarie (1991) | Stochastic single-flow (8-way) | — |
 | `Rho4` | `FairfieldLeymarieD4` | Fairfield & Leymarie (1991) | Stochastic single-flow (4-way) | — |
 
 ### Two-Stage Proportions & Custom Weights
