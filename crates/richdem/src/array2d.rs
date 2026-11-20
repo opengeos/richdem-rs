@@ -1,6 +1,6 @@
 //! 2D georeferenced raster array matching RichDEM's `Array2D<T>`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::fmt::Write as _;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
@@ -614,13 +614,18 @@ impl<T: DemNum> Array2D<T> {
             ];
             let mut chosen = candidates.into_iter().find(|&c| is_unused(c));
             if chosen.is_none() && !U::IS_FLOAT {
-                // Fallback scan for an unused integer value (covers full u8/i8 and small ranges).
+                // Build occupied valid-value set once (O(N)) before probing fallback candidates.
+                let occupied: HashSet<i128> = data
+                    .iter()
+                    .zip(is_nd_mask.iter())
+                    .filter(|&(_, &nd)| !nd)
+                    .map(|(&val, _)| val.to_i128())
+                    .collect();
                 let lo = U::LOWEST.to_i128();
                 let hi = U::MAX.to_i128().min(lo.saturating_add(65_535));
                 for probe in lo..=hi {
-                    let cand = U::from_i128_clamped(probe);
-                    if is_unused(cand) {
-                        chosen = Some(cand);
+                    if !occupied.contains(&probe) {
+                        chosen = Some(U::from_i128_clamped(probe));
                         break;
                     }
                 }

@@ -183,6 +183,48 @@ fn validate_fsm_inputs<T: DemNum, W: DemNum>(
     let mut dh_state = vec![0u8; num_deps];
     check_dh_acyclic(OCEAN, deps, &mut dh_state)?;
 
+    // Helper: check whether `target` belongs to the hierarchy subtree rooted at `root`.
+    fn in_subtree<T: DemNum>(
+        root: DhLabel,
+        target: DhLabel,
+        deps: &DepressionHierarchy<T>,
+    ) -> bool {
+        if root == NO_VALUE {
+            return false;
+        }
+        if root == target {
+            return true;
+        }
+        let d = &deps[root as usize];
+        if in_subtree(d.lchild, target, deps) || in_subtree(d.rchild, target, deps) {
+            return true;
+        }
+        d.ocean_linked.iter().any(|&c| in_subtree(c, target, deps))
+    }
+
+    // Validate invariants for every reachable non-ocean depression before mutating state.
+    for (idx, d) in deps.iter().enumerate() {
+        if idx == OCEAN as usize || dh_state[idx] == 0 {
+            continue;
+        }
+        if d.parent == NO_VALUE {
+            return Err(Error::InvalidArgument(format!(
+                "reachable non-ocean depression {idx} is missing a parent"
+            )));
+        }
+        if d.pit_cell == NO_VALUE || d.out_cell == NO_VALUE {
+            return Err(Error::InvalidArgument(format!(
+                "reachable non-ocean depression {idx} is missing pit_cell or out_cell"
+            )));
+        }
+        if d.odep != NO_VALUE && (d.geolink == NO_VALUE || !in_subtree(d.odep, d.geolink, deps)) {
+            return Err(Error::InvalidArgument(format!(
+                "depression {idx} has geolink={} outside overflow sibling odep={} subtree",
+                d.geolink, d.odep
+            )));
+        }
+    }
+
     let dx = topology.dx();
     let dy = topology.dy();
     let nmax = topology.nmax() as Flowdir;
@@ -192,9 +234,9 @@ fn validate_fsm_inputs<T: DemNum, W: DemNum>(
         for x in 0..w {
             let ci = y * w + x;
             let lbl = label.get(x, y) as usize;
-            if lbl >= num_deps {
+            if lbl >= num_deps || dh_state[lbl] == 0 {
                 return Err(Error::InvalidArgument(format!(
-                    "label {lbl} at ({x}, {y}) exceeds DepressionHierarchy length {num_deps}"
+                    "label {lbl} at ({x}, {y}) is out of range or unreachable from OCEAN"
                 )));
             }
             let dir = flowdirs.get(x, y);
@@ -214,6 +256,13 @@ fn validate_fsm_inputs<T: DemNum, W: DemNum>(
                 )));
             }
             let ni = (ny as usize) * w + (nx as usize);
+            let ni_masked = (!wtd.no_data().rd_eq(W::ZERO) && wtd.is_no_data_i(ni))
+                || (W::IS_FLOAT && !wtd.get_i(ni).to_f64().is_finite());
+            if ni_masked && label.get_i(ni) != OCEAN {
+                return Err(Error::InvalidArgument(format!(
+                    "flow from ({x}, {y}) enters a NoData non-ocean cell at ({nx}, {ny})"
+                )));
+            }
             downstream[ci] = ni;
             indeg[ni] += 1;
         }
@@ -317,7 +366,9 @@ fn move_water_into_pits_with_topology<T: DemNum, W: DemNum>(
 
         match downstream {
             None => {
-                if !wtd.is_no_data_i(ci) {
+                let ci_masked = (!wtd.no_data().rd_eq(W::ZERO) && wtd.is_no_data_i(ci))
+                    || (W::IS_FLOAT && !wtd.get_i(ci).to_f64().is_finite());
+                if !ci_masked {
                     let cw = wtd.get_i(ci).to_f64();
                     if cw > 0.0 {
                         deps[label.get_i(ci) as usize].water_vol += cw;
@@ -326,16 +377,23 @@ fn move_water_into_pits_with_topology<T: DemNum, W: DemNum>(
                 }
             }
             Some(ni) => {
-                if !wtd.is_no_data_i(ci) {
+                let ci_masked = (!wtd.no_data().rd_eq(W::ZERO) && wtd.is_no_data_i(ci))
+                    || (W::IS_FLOAT && !wtd.get_i(ci).to_f64().is_finite());
+                if !ci_masked {
                     let cw = wtd.get_i(ci).to_f64();
                     if cw > 0.0 {
-                        if wtd.is_no_data_i(ni) && label.get_i(ni) == OCEAN {
-                            deps[OCEAN as usize].water_vol += cw;
+                        let ni_masked = (!wtd.no_data().rd_eq(W::ZERO) && wtd.is_no_data_i(ni))
+                            || (W::IS_FLOAT && !wtd.get_i(ni).to_f64().is_finite());
+                        if ni_masked {
+                            if label.get_i(ni) == OCEAN {
+                                deps[OCEAN as usize].water_vol += cw;
+                                wtd.set_i(ci, W::ZERO);
+                            }
                         } else {
                             let nw = wtd.get_i(ni).to_f64();
                             wtd.set_i(ni, W::from_f64(nw + cw));
+                            wtd.set_i(ci, W::ZERO);
                         }
-                        wtd.set_i(ci, W::ZERO);
                     }
                 }
                 let rem = dependencies.get_i(ni) - 1;

@@ -34,13 +34,17 @@ fn area_proportion(flowdir: f64, nhigh: usize, nlow: Option<usize>) -> (f64, f64
 
 /// Calculates each cell's D-infinity upslope contributing area from a D-infinity flow
 /// direction raster (produced by [`crate::flowmet::dinf_flow_directions`]).
+///
+/// Output type `U` should be a floating-point type (`f32` or `f64`) because D-infinity
+/// proportions fractional areas across neighbor facets and uses `-1.0` (`DINF_NO_DATA`)
+/// as its NoData sentinel.
 pub fn dinf_upslope_area<T: DemNum, U: DemNum>(flowdirs: &Array2D<T>) -> Array2D<U> {
     let w = flowdirs.width();
     let h = flowdirs.height();
 
     let mut dependency = Array2D::<i8>::new(w, h, 0);
     let mut area = Array2D::<U>::make_from_template(flowdirs, U::ZERO);
-    area.set_no_data(U::from_f64(DINF_NO_DATA as f64));
+    area.set_no_data(U::from_nodata_f64(DINF_NO_DATA as f64));
     let area_nd = area.no_data();
 
     for y in 0..h {

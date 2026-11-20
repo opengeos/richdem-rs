@@ -50,6 +50,9 @@ fn dinf_flow_dir<T: DemNum>(elevations: &Array2D<T>, x: usize, y: usize) -> f32 
     let mut smax = 0.0f64;
     let mut rmax = 0.0f64;
     let e0 = elevations.get(x, y).to_f64();
+    if !e0.is_finite() {
+        return DINF_NO_DATA;
+    }
     let dang = 1.0f64.atan2(1.0);
 
     for n in 0..8 {
@@ -62,7 +65,7 @@ fn dinf_flow_dir<T: DemNum>(elevations: &Array2D<T>, x: usize, y: usize) -> f32 
         }
         let e1 = elevations.get_xy(x1, y1).to_f64();
         let e2 = elevations.get_xy(x2, y2).to_f64();
-        if e1.is_nan() || e2.is_nan() {
+        if !e1.is_finite() || !e2.is_finite() {
             continue;
         }
 

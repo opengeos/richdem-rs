@@ -184,6 +184,7 @@ pub fn get_depression_hierarchy<T: DemNum>(
     let mut land_seeds: Vec<FlatIdx> = Vec::with_capacity((w * h) / 40);
     let mut has_ocean = false;
     let nd = dem.no_data();
+    let is_missing = |v: T| -> bool { v.rd_eq(nd) || (T::IS_FLOAT && !v.to_f64().is_finite()) };
 
     // Pass 1: validate all labels without mutating `label` so errors leave it untouched.
     for y in 0..h {
@@ -194,7 +195,7 @@ pub fn get_depression_hierarchy<T: DemNum>(
                     "Label array given to get_depression_hierarchy must contain only NO_DEP and OCEAN labels!".into(),
                 ));
             }
-            if l == OCEAN || dem.get(x, y).rd_eq(nd) {
+            if l == OCEAN || is_missing(dem.get(x, y)) {
                 has_ocean = true;
             }
         }
@@ -206,10 +207,10 @@ pub fn get_depression_hierarchy<T: DemNum>(
         ));
     }
 
-    // Pass 2: classify NoData cells as OCEAN (matching Barnes 2020 reference).
+    // Pass 2: classify NoData / non-finite cells as OCEAN (matching Barnes 2020 reference).
     for y in 0..h {
         for x in 0..w {
-            if dem.get(x, y).rd_eq(nd) {
+            if is_missing(dem.get(x, y)) {
                 label.set(x, y, OCEAN);
             }
         }
@@ -266,7 +267,8 @@ pub fn get_depression_hierarchy<T: DemNum>(
                 if !dem.in_grid(nx, ny) {
                     continue;
                 }
-                if dem.get_xy(nx, ny).rd_cmp(my_elev) == Ordering::Less {
+                let ne = dem.get_xy(nx, ny);
+                if !is_missing(ne) && ne.rd_cmp(my_elev) == Ordering::Less {
                     has_lower = true;
                     break;
                 }
@@ -286,8 +288,9 @@ pub fn get_depression_hierarchy<T: DemNum>(
 
     for x in ocean_seeds {
         seq += 1;
+        let z = dem.get_i(x as usize);
         pq.push(KeyValEntry {
-            key: dem.get_i(x as usize),
+            key: if is_missing(z) { T::NEG_INFINITY } else { z },
             value: x,
             seq,
         });
@@ -344,7 +347,7 @@ pub fn get_depression_hierarchy<T: DemNum>(
                 let mut out_cell = ci;
                 let mut out_elev = celev;
                 let ne = dem.get_i(ni as usize);
-                if ne.rd_cmp(out_elev) == Ordering::Greater {
+                if !is_missing(ne) && ne.rd_cmp(out_elev) == Ordering::Greater {
                     out_cell = ni;
                     out_elev = ne;
                 }

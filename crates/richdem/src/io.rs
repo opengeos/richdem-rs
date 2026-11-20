@@ -83,11 +83,29 @@ pub fn load_raster_padded<T: DemNum>(
     if pad_x == 0 && pad_y == 0 {
         return Ok(inner);
     }
-    let mut out = Array2D::new(
-        inner.width() + 2 * pad_x,
-        inner.height() + 2 * pad_y,
-        T::ZERO,
-    );
+    let out_w = pad_x
+        .checked_mul(2)
+        .and_then(|p| p.checked_add(inner.width()))
+        .ok_or_else(|| {
+            Error::DimensionMismatch(format!("padded width overflows usize (pad_x={pad_x})"))
+        })?;
+    let out_h = pad_y
+        .checked_mul(2)
+        .and_then(|p| p.checked_add(inner.height()))
+        .ok_or_else(|| {
+            Error::DimensionMismatch(format!("padded height overflows usize (pad_y={pad_y})"))
+        })?;
+    let total = out_w.checked_mul(out_h).ok_or_else(|| {
+        Error::DimensionMismatch(format!(
+            "padded dimensions overflow usize ({out_w}x{out_h})"
+        ))
+    })?;
+    let mut data = Vec::<T>::new();
+    data.try_reserve_exact(total).map_err(|e| {
+        Error::DimensionMismatch(format!("failed to allocate {out_w}x{out_h} raster: {e}"))
+    })?;
+    data.resize(total, T::ZERO);
+    let mut out = Array2D::from_vec(out_w, out_h, data)?;
     out.copy_metadata_from(&inner);
     let gt = inner.geotransform;
     out.geotransform[0] = gt[0] - (pad_x as f64) * gt[1] - (pad_y as f64) * gt[2];

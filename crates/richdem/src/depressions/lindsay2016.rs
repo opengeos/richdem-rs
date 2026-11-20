@@ -285,7 +285,14 @@ pub fn lindsay2016<T: DemNum>(
                             let orig_f = orig_e.to_f64();
                             let limit_f = target_height.to_f64() + max_depth_f64;
                             if orig_f > limit_f {
-                                T::from_f64(orig_f - max_depth_f64)
+                                let bound = orig_f - max_depth_f64;
+                                let mut min_v = T::from_f64(bound);
+                                if min_v.to_f64() < bound
+                                    && let Some(up) = min_v.next_up_float()
+                                {
+                                    min_v = up;
+                                }
+                                min_v
                             } else {
                                 target_height
                             }

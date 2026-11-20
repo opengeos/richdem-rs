@@ -38,7 +38,7 @@ fn d8_flow_dir<T: DemNum>(elevations: &Array2D<T>, x: usize, y: usize) -> D8Flow
             continue;
         }
         let ne = elevations.get_xy(nx, ny);
-        if ne.is_nan() {
+        if T::IS_FLOAT && !ne.to_f64().is_finite() {
             continue;
         }
         let cmp = ne.rd_cmp(min_elev);

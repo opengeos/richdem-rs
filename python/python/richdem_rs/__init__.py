@@ -461,10 +461,62 @@ def flow_accumulation_from_d8(d8: rdarray) -> rdarray:
     )
 
 
+def _normalize_flowdir_u8(
+    flowdirs: rdarray | np.ndarray,
+    *,
+    valid_min: int,
+    valid_max: int,
+    name: str,
+) -> tuple[np.ndarray, int]:
+    """Validate unmasked flow directions on their source dtype and normalize NoData to u8."""
+    raw = np.asarray(flowdirs)
+    raw_nd: float | int = flowdirs.no_data if isinstance(flowdirs, rdarray) else 255
+    is_float = np.issubdtype(raw.dtype, np.floating)
+
+    if is_float:
+        nd_f = float(raw_nd)
+        mask = np.isnan(raw) if np.isnan(nd_f) else (raw == nd_f)
+    else:
+        if isinstance(raw_nd, (float, np.floating)) and (
+            not np.isfinite(raw_nd) or not float(raw_nd).is_integer()
+        ):
+            mask = np.zeros(raw.shape, dtype=bool)
+        else:
+            mask = raw == int(raw_nd)
+
+    valid = raw[~mask]
+    if valid.size:
+        if is_float and (
+            not np.all(np.isfinite(valid)) or np.any(np.floor(valid) != valid)
+        ):
+            raise ValueError(f"{name} flow directions must be finite integer values")
+        if np.any((valid < valid_min) | (valid > valid_max)):
+            raise ValueError(
+                f"{name} flow directions must be within [{valid_min}, {valid_max}]"
+            )
+
+    if (
+        isinstance(raw_nd, (int, np.integer))
+        or (
+            isinstance(raw_nd, (float, np.floating))
+            and np.isfinite(raw_nd)
+            and float(raw_nd).is_integer()
+        )
+    ) and 0 <= int(raw_nd) <= 255:
+        in_nd = int(raw_nd)
+    else:
+        in_nd = 255
+
+    arr = np.full(raw.shape, in_nd, dtype=np.uint8)
+    arr[~mask] = valid.astype(np.uint8)
+    return np.ascontiguousarray(arr, dtype=np.uint8), in_nd
+
+
 def convert_arc_flowdirs_to_richdem_d8(arc_flowdirs: rdarray) -> rdarray:
     """Converts ArcGIS D8 flow directions to RichDEM D8 flow directions."""
-    arr = np.ascontiguousarray(arc_flowdirs, dtype=np.uint8)
-    in_nd = int(arc_flowdirs.no_data) if isinstance(arc_flowdirs, rdarray) else 255
+    arr, in_nd = _normalize_flowdir_u8(
+        arc_flowdirs, valid_min=0, valid_max=128, name="ArcGIS"
+    )
     out, out_nd = _richdem_rs.convert_arc_flowdirs_py(arr, in_nd)
     return rdarray(
         out,
@@ -475,9 +527,8 @@ def convert_arc_flowdirs_to_richdem_d8(arc_flowdirs: rdarray) -> rdarray:
 
 def convert_taudem_d8_to_richdem_d8(taudem_flowdirs: rdarray) -> rdarray:
     """Converts TauDEM D8 flow directions to RichDEM D8 flow directions."""
-    arr = np.ascontiguousarray(taudem_flowdirs, dtype=np.uint8)
-    in_nd = (
-        int(taudem_flowdirs.no_data) if isinstance(taudem_flowdirs, rdarray) else 255
+    arr, in_nd = _normalize_flowdir_u8(
+        taudem_flowdirs, valid_min=0, valid_max=8, name="TauDEM"
     )
     out, out_nd = _richdem_rs.convert_taudem_flowdirs_py(arr, in_nd)
     return rdarray(

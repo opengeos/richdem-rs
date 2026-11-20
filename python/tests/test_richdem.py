@@ -116,6 +116,21 @@ def test_python_review_regression_cases() -> None:
     assert int(rd_td.no_data) == 255
     assert list(rd_td[0]) == [5, 1, 255]
 
+    # Signed int32 TauDEM with no_data=-9999 normalizes cleanly, and invalid/fractional codes fail
+    taudem_signed = rd.rdarray(np.array([[1, 5, -9999]], dtype=np.int32), no_data=-9999)
+    rd_td_signed = rd.convert_taudem_d8_to_richdem_d8(taudem_signed)
+    assert int(rd_td_signed.no_data) == 255
+    assert list(rd_td_signed[0]) == [5, 1, 255]
+
+    with pytest.raises(ValueError):
+        rd.convert_taudem_d8_to_richdem_d8(
+            rd.rdarray(np.array([[1.5]], dtype=np.float64), no_data=255)
+        )
+    with pytest.raises(ValueError):
+        rd.convert_arc_flowdirs_to_richdem_d8(
+            rd.rdarray(np.array([[300]], dtype=np.int32), no_data=-9999)
+        )
+
     # 4b. Big-endian arrays save cleanly via SaveGDAL
     be_arr = rd.rdarray(
         np.array([[1.5, 2.5]], dtype=">f4"),

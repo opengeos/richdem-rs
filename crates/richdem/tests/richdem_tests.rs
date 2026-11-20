@@ -669,9 +669,9 @@ fn test_tarboton_and_dinf_flow_direction_edge_cases() {
     let single_area = dinf_upslope_area::<f32, f64>(&single);
     assert_eq!(single_area.get(0, 0), 1.0);
 
-    // D8 and Dinf skip NoData and NaN neighbors rather than routing into them
+    // D8 and Dinf skip NoData, NaN, and infinite neighbors rather than routing into them
     let mut nd_neighbor_dem = Array2D::from_rows(&[
-        &[10.0f64, 10.0, 10.0],
+        &[10.0f64, f64::NEG_INFINITY, 10.0],
         &[-9999.0, 10.0, 9.0],
         &[10.0, f64::NAN, 10.0],
     ])
@@ -788,15 +788,20 @@ fn test_all_ocean_hierarchy_and_fsm_validation() {
     assert_eq!(ocean_dh[OCEAN as usize].dep_vol, 0.0);
     assert!(ocean_fds.data().iter().all(|&d| d == NO_FLOW));
 
-    // Flow-direction cycle is rejected before mutating wtd
+    // Flow-direction cycle is rejected before mutating wtd or deps
     let dem = Array2D::new(3, 3, 1.0f64);
-    let labels = get_new_depression_hierarchy_labels(3, 3, None);
+    let labels = Array2D::new(3, 3, OCEAN);
     let mut cyclic_fds = Array2D::new(3, 3, NO_FLOW);
     cyclic_fds.set(0, 1, 5); // flows East -> (1, 1)
     cyclic_fds.set(1, 1, 1); // flows West -> (0, 1)
-    let mut deps = vec![Depression::default()];
+    let mut deps = vec![Depression {
+        water_vol: 42.0,
+        ..Default::default()
+    }];
     let mut wtd = Array2D::new(3, 3, 2.0f64);
-    assert!(fill_spill_merge(&dem, &labels, &cyclic_fds, &mut deps, &mut wtd).is_err());
+    let err = fill_spill_merge(&dem, &labels, &cyclic_fds, &mut deps, &mut wtd).unwrap_err();
+    assert!(err.to_string().contains("cycle"), "unexpected error: {err}");
+    assert_eq!(deps[0].water_vol, 42.0);
     assert!(wtd.data().iter().all(|&v| v == 2.0));
 }
 
