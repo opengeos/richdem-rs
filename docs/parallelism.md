@@ -21,7 +21,7 @@ richdem = { version = "0.1", default-features = false, features = ["terrio"] }
 
 ## Determinism
 
-All parallelized kernels operate on independent output rows or collect per-row partial results in deterministic row order so outputs are independent of thread scheduling order across thread counts and between `parallel` and single-threaded builds.
+All parallelized kernels operate on independent output rows or collect per-row partial results in deterministic row order, ensuring identical results across thread counts and between `parallel` and single-threaded builds.
 
 ## What Runs in Parallel vs. Sequentially
 

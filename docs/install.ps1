@@ -28,10 +28,27 @@ function Install-Richdem {
 
     $version = $env:RICHDEM_VERSION
     if (-not $version) {
+        # Prefer the releases/latest redirect (not subject to the 60 req/hr unauthenticated API limit),
+        # falling back to the GitHub API if needed.
         try {
-            $version = (Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest").tag_name
-        } catch {
-            throw "Could not find the latest release of $repo; set RICHDEM_VERSION to the version to install"
+            $req = [System.Net.HttpWebRequest]::Create("https://github.com/$repo/releases/latest")
+            $req.AllowAutoRedirect = $false
+            $resp = $req.GetResponse()
+            try {
+                $loc = $resp.Headers["Location"]
+            } finally {
+                $resp.Close()
+            }
+            if ($loc -match '/tag/(v[0-9][0-9A-Za-z._+-]*)$') {
+                $version = $Matches[1]
+            }
+        } catch {}
+        if (-not $version) {
+            try {
+                $version = (Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest").tag_name
+            } catch {
+                throw "Could not find the latest release of $repo; set RICHDEM_VERSION to the version to install"
+            }
         }
     }
     $version = "v" + $version.TrimStart("v")
@@ -67,8 +84,15 @@ function Install-Richdem {
 
         Expand-Archive $zip -DestinationPath $tmp
         New-Item -ItemType Directory -Path $installDir -Force | Out-Null
-        Copy-Item (Join-Path $tmp "$name\richdem.exe") (Join-Path $installDir "richdem.exe") -Force
-        Write-Host "richdem-installer: installed $(Join-Path $installDir 'richdem.exe')"
+        $dst = Join-Path $installDir "richdem.exe"
+        $stage = Join-Path $installDir "richdem.exe.tmp"
+        $old = Join-Path $installDir "richdem.exe.old"
+        Copy-Item (Join-Path $tmp "$name\richdem.exe") $stage -Force
+        if (Test-Path $old) { Remove-Item $old -Force -ErrorAction SilentlyContinue }
+        if (Test-Path $dst) { Move-Item $dst $old -Force }
+        Move-Item $stage $dst -Force
+        if (Test-Path $old) { Remove-Item $old -Force -ErrorAction SilentlyContinue }
+        Write-Host "richdem-installer: installed $dst"
     } finally {
         Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
     }
@@ -78,10 +102,20 @@ function Install-Richdem {
             Write-Host "richdem-installer: $installDir is not on your PATH"
         }
     } else {
-        $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-        if (-not (($userPath -split ";") -contains $installDir)) {
-            [Environment]::SetEnvironmentVariable("Path", (@($installDir) + ($userPath -split ";" | Where-Object { $_ })) -join ";", "User")
-            Write-Host "richdem-installer: added $installDir to your PATH"
+        # Read/write the raw registry value so REG_EXPAND_SZ entries (e.g. %USERPROFILE%\...)
+        # are preserved unexpanded and long user PATHs are not truncated.
+        $envKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey("Environment", $true)
+        try {
+            $userPath = $envKey.GetValue("Path", "", [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+            $kind = if ($envKey.GetValueNames() -contains "Path") { $envKey.GetValueKind("Path") } else { [Microsoft.Win32.RegistryValueKind]::ExpandString }
+            $entries = @($userPath -split ";" | Where-Object { $_ })
+            if (-not ($entries -contains $installDir)) {
+                $newPath = (@($installDir) + $entries) -join ";"
+                $envKey.SetValue("Path", $newPath, $kind)
+                Write-Host "richdem-installer: added $installDir to your PATH (open a new terminal to pick it up in other shells)"
+            }
+        } finally {
+            $envKey.Close()
         }
         # This session too (the script runs in the caller's, with irm | iex), which may predate
         # the user PATH having it.

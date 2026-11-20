@@ -100,7 +100,11 @@ main() {
     fi
     version="v${version#v}"
     case "$version" in
-        *[!v0-9A-Za-z._+-]* | v) err "invalid version: $version" ;;
+        v[0-9]*) ;;
+        *) err "invalid version: $version" ;;
+    esac
+    case "$version" in
+        *[!0-9A-Za-z._+-]*) err "invalid version: $version" ;;
     esac
 
     install_dir="${RICHDEM_INSTALL_DIR:-${XDG_BIN_HOME:-$HOME/.local/bin}}"

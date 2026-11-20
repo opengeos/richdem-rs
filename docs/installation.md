@@ -69,7 +69,7 @@ richdem = { version = "0.1", default-features = false }
 
 ### Shell / PowerShell installer (recommended)
 
-The installer downloads the standalone `richdem` binary for your platform (Linux `x86_64` and `aarch64` static musl; macOS Intel and Apple Silicon; Windows `x64` and `ARM64`) from the latest [GitHub Release](https://github.com/opengeos/richdem-rs/releases), verifies its SHA-256 checksum, and installs it to `$XDG_BIN_HOME` or `~/.local/bin` (`%USERPROFILE%\.local\bin` on Windows). No Rust or Python installation is required.
+The installer downloads the standalone `richdem` binary for your platform (Linux `x86_64` and `aarch64` static musl; macOS Intel and Apple Silicon; Windows `x64` and `ARM64`) from the latest [GitHub Release](https://github.com/opengeos/richdem-rs/releases), checks the release's `.sha256` checksum to catch corrupted downloads, and installs it to `$XDG_BIN_HOME` or `~/.local/bin` (`%USERPROFILE%\.local\bin` on Windows). No Rust or Python installation is required. (Checksums come from the same GitHub Release as the archives, so they guard against download corruption rather than acting as an independent release signature.)
 
 ```sh
 # Linux and macOS
