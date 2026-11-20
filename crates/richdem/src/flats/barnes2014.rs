@@ -7,7 +7,7 @@
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 
-use crate::array2d::Array2D;
+use crate::array2d::{Array2D, for_each_row_mut};
 use crate::array3d::{Array3D, FLOW_PROPS_DEPTH};
 use crate::constants::{D8X, D8Y, HAS_FLOW_GEN, NO_FLOW_GEN};
 use crate::error::{Error, Result};
@@ -301,8 +301,7 @@ pub fn resolve_flats_flowdirs_barnes2014(
         return;
     }
 
-    let row_stride = w * FLOW_PROPS_DEPTH;
-    let process_row = |y: usize, row: &mut [f32]| {
+    for_each_row_mut(flowdirs.data_mut(), w * FLOW_PROPS_DEPTH, |y, row| {
         if y == 0 || y + 1 >= h {
             return;
         }
@@ -338,22 +337,5 @@ pub fn resolve_flats_flowdirs_barnes2014(
                 cell[flowdir] = 1.0;
             }
         }
-    };
-
-    #[cfg(feature = "parallel")]
-    {
-        use rayon::prelude::*;
-        flowdirs
-            .data_mut()
-            .par_chunks_mut(row_stride)
-            .enumerate()
-            .for_each(|(y, row)| process_row(y, row));
-    }
-
-    #[cfg(not(feature = "parallel"))]
-    {
-        for (y, row) in flowdirs.data_mut().chunks_mut(row_stride).enumerate() {
-            process_row(y, row);
-        }
-    }
+    });
 }

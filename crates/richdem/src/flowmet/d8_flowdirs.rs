@@ -2,7 +2,7 @@
 
 use std::cmp::Ordering;
 
-use crate::array2d::Array2D;
+use crate::array2d::{Array2D, for_each_row_mut};
 use crate::constants::{D8Flowdir, D8X, D8Y, FLOWDIR_NO_DATA, NO_FLOW};
 use crate::num::DemNum;
 
@@ -56,15 +56,10 @@ fn d8_flow_dir<T: DemNum>(elevations: &Array2D<T>, x: usize, y: usize) -> D8Flow
 /// Calculates D8 steepest-descent flow directions (`0..=8`, [`FLOWDIR_NO_DATA`] for NoData).
 pub fn d8_flow_directions<T: DemNum>(elevations: &Array2D<T>) -> Array2D<D8Flowdir> {
     let w = elevations.width();
-    let h = elevations.height();
     let mut flowdirs = Array2D::<D8Flowdir>::make_from_template(elevations, NO_FLOW as u8);
     flowdirs.set_no_data(FLOWDIR_NO_DATA);
 
-    if w == 0 || h == 0 {
-        return flowdirs;
-    }
-
-    let process_row = |y: usize, row: &mut [D8Flowdir]| {
+    for_each_row_mut(flowdirs.data_mut(), w, |y, row| {
         for (x, dst) in row.iter_mut().enumerate().take(w) {
             *dst = if elevations.is_no_data(x, y)
                 || (T::IS_FLOAT && !elevations.get(x, y).to_f64().is_finite())
@@ -74,24 +69,7 @@ pub fn d8_flow_directions<T: DemNum>(elevations: &Array2D<T>) -> Array2D<D8Flowd
                 d8_flow_dir(elevations, x, y)
             };
         }
-    };
-
-    #[cfg(feature = "parallel")]
-    {
-        use rayon::prelude::*;
-        flowdirs
-            .data_mut()
-            .par_chunks_mut(w)
-            .enumerate()
-            .for_each(|(y, row)| process_row(y, row));
-    }
-
-    #[cfg(not(feature = "parallel"))]
-    {
-        for (y, row) in flowdirs.data_mut().chunks_mut(w).enumerate() {
-            process_row(y, row);
-        }
-    }
+    });
 
     flowdirs
 }

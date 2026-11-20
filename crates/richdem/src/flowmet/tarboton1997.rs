@@ -6,7 +6,7 @@
 
 use std::f64::consts::{PI, SQRT_2};
 
-use crate::array2d::Array2D;
+use crate::array2d::{Array2D, for_each_row_mut};
 use crate::array3d::{Array3D, FLOW_PROPS_DEPTH};
 use crate::constants::{HAS_FLOW_GEN, NO_DATA_GEN, NO_FLOW_GEN};
 use crate::num::DemNum;
@@ -19,12 +19,8 @@ fn nwrap(n: usize) -> usize {
 /// Computes Tarboton (1997) D-infinity flow proportions into `Array3D<f32>`.
 pub fn fm_tarboton<T: DemNum>(elevations: &Array2D<T>) -> Array3D<f32> {
     let w = elevations.width();
-    let h = elevations.height();
     let mut props = Array3D::<f32>::make_from_template(elevations, NO_FLOW_GEN);
     props.set_no_data(NO_DATA_GEN);
-    if w == 0 || h == 0 {
-        return props;
-    }
 
     let dang: f64 = 1.0f64.atan2(1.0);
     let dang_f32 = dang as f32;
@@ -36,8 +32,7 @@ pub fn fm_tarboton<T: DemNum>(elevations: &Array2D<T>) -> Array3D<f32> {
     const DX_E2: [i32; 9] = [0, -1, -1, 1, 1, 1, 1, -1, -1];
     const AF: [f64; 9] = [0.0, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0];
 
-    let row_stride = w * FLOW_PROPS_DEPTH;
-    let process_row = |y: usize, row: &mut [f32]| {
+    for_each_row_mut(props.data_mut(), w * FLOW_PROPS_DEPTH, |y, row| {
         for x in 0..w {
             let cell = &mut row[x * FLOW_PROPS_DEPTH..(x + 1) * FLOW_PROPS_DEPTH];
             if elevations.is_no_data(x, y) {
@@ -114,24 +109,7 @@ pub fn fm_tarboton<T: DemNum>(elevations: &Array2D<T>) -> Array3D<f32> {
                 cell[nwrap(nmax + 1)] = p;
             }
         }
-    };
-
-    #[cfg(feature = "parallel")]
-    {
-        use rayon::prelude::*;
-        props
-            .data_mut()
-            .par_chunks_mut(row_stride)
-            .enumerate()
-            .for_each(|(y, row)| process_row(y, row));
-    }
-
-    #[cfg(not(feature = "parallel"))]
-    {
-        for (y, row) in props.data_mut().chunks_mut(row_stride).enumerate() {
-            process_row(y, row);
-        }
-    }
+    });
 
     props
 }

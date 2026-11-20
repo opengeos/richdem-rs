@@ -5,7 +5,7 @@
 
 use std::cmp::Ordering;
 
-use crate::array2d::Array2D;
+use crate::array2d::{Array2D, for_each_row_mut};
 use crate::array3d::{Array3D, FLOW_PROPS_DEPTH};
 use crate::constants::{D8X, D8Y, DR, HAS_FLOW_GEN, NO_DATA_GEN, NO_FLOW_GEN};
 use crate::num::DemNum;
@@ -13,15 +13,10 @@ use crate::num::DemNum;
 /// Computes Freeman (1991) flow proportions with exponent `xparam`.
 pub fn fm_freeman<T: DemNum>(elevations: &Array2D<T>, xparam: f64) -> Array3D<f32> {
     let w = elevations.width();
-    let h = elevations.height();
     let mut props = Array3D::<f32>::make_from_template(elevations, NO_FLOW_GEN);
     props.set_no_data(NO_DATA_GEN);
-    if w == 0 || h == 0 {
-        return props;
-    }
 
-    let row_stride = w * FLOW_PROPS_DEPTH;
-    let process_row = |y: usize, row: &mut [f32]| {
+    for_each_row_mut(props.data_mut(), w * FLOW_PROPS_DEPTH, |y, row| {
         for x in 0..w {
             let cell = &mut row[x * FLOW_PROPS_DEPTH..(x + 1) * FLOW_PROPS_DEPTH];
             if elevations.is_no_data(x, y) {
@@ -78,24 +73,7 @@ pub fn fm_freeman<T: DemNum>(elevations: &Array2D<T>, xparam: f64) -> Array3D<f3
                 }
             }
         }
-    };
-
-    #[cfg(feature = "parallel")]
-    {
-        use rayon::prelude::*;
-        props
-            .data_mut()
-            .par_chunks_mut(row_stride)
-            .enumerate()
-            .for_each(|(y, row)| process_row(y, row));
-    }
-
-    #[cfg(not(feature = "parallel"))]
-    {
-        for (y, row) in props.data_mut().chunks_mut(row_stride).enumerate() {
-            process_row(y, row);
-        }
-    }
+    });
 
     props
 }

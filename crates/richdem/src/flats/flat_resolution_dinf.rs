@@ -2,7 +2,7 @@
 
 use std::f64::consts::PI;
 
-use crate::array2d::Array2D;
+use crate::array2d::{Array2D, for_each_row_mut};
 use crate::constants::{D8X, D8Y, DINF_NO_FLOW};
 use crate::flats::flat_resolution::resolve_flats_barnes;
 use crate::flowmet::dinf_flowdirs::{AC, AF, DX_E1, DX_E2, DY_E1, DY_E2, dinf_flow_directions};
@@ -89,7 +89,7 @@ pub fn dinf_flow_flats(
         return;
     }
 
-    let process_row = |y: usize, row: &mut [f32]| {
+    for_each_row_mut(flowdirs.data_mut(), w, |y, row| {
         if y == 0 || y + 1 >= h {
             return;
         }
@@ -101,24 +101,7 @@ pub fn dinf_flow_flats(
                 *dst = dinf_masked_flow_dir(flat_resolution_mask, groups, x, y);
             }
         }
-    };
-
-    #[cfg(feature = "parallel")]
-    {
-        use rayon::prelude::*;
-        flowdirs
-            .data_mut()
-            .par_chunks_mut(w)
-            .enumerate()
-            .for_each(|(y, row)| process_row(y, row));
-    }
-
-    #[cfg(not(feature = "parallel"))]
-    {
-        for (y, row) in flowdirs.data_mut().chunks_mut(w).enumerate() {
-            process_row(y, row);
-        }
-    }
+    });
 }
 
 /// Computes D-infinity flow directions with Barnes (2014) flat resolution.

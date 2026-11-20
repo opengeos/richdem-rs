@@ -1,6 +1,6 @@
 //! Identification of flat cells (cells with no local downhill gradient under D8).
 
-use crate::array2d::Array2D;
+use crate::array2d::{Array2D, for_each_row_mut};
 use crate::constants::{D8X, D8Y};
 use crate::num::DemNum;
 
@@ -16,15 +16,10 @@ pub const IS_A_FLAT: i8 = 1;
 /// Output values: [`IS_A_FLAT`] (`1`), [`NOT_A_FLAT`] (`0`), or [`FLAT_NO_DATA`] (`-1`).
 pub fn find_flats<T: DemNum>(elevations: &Array2D<T>) -> Array2D<i8> {
     let w = elevations.width();
-    let h = elevations.height();
     let mut flats = Array2D::<i8>::make_from_template(elevations, NOT_A_FLAT);
     flats.set_no_data(FLAT_NO_DATA);
 
-    if w == 0 || h == 0 {
-        return flats;
-    }
-
-    let process_row = |y: usize, row: &mut [i8]| {
+    for_each_row_mut(flats.data_mut(), w, |y, row| {
         for (x, dst) in row.iter_mut().enumerate().take(w) {
             if elevations.is_no_data(x, y) {
                 *dst = FLAT_NO_DATA;
@@ -49,24 +44,7 @@ pub fn find_flats<T: DemNum>(elevations: &Array2D<T>) -> Array2D<i8> {
             }
             *dst = if is_flat { IS_A_FLAT } else { NOT_A_FLAT };
         }
-    };
-
-    #[cfg(feature = "parallel")]
-    {
-        use rayon::prelude::*;
-        flats
-            .data_mut()
-            .par_chunks_mut(w)
-            .enumerate()
-            .for_each(|(y, row)| process_row(y, row));
-    }
-
-    #[cfg(not(feature = "parallel"))]
-    {
-        for (y, row) in flats.data_mut().chunks_mut(w).enumerate() {
-            process_row(y, row);
-        }
-    }
+    });
 
     flats
 }

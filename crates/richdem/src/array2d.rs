@@ -1083,3 +1083,29 @@ impl DynamicArray2D {
         }
     }
 }
+
+/// Applies `f(row_index, row_slice)` to every `stride`-element row in `data`,
+/// running across threads with `rayon` when `feature = "parallel"` is enabled.
+/// Returns immediately if `stride == 0` or `data` is empty.
+pub(crate) fn for_each_row_mut<T: Send>(
+    data: &mut [T],
+    stride: usize,
+    f: impl Fn(usize, &mut [T]) + Sync,
+) {
+    if stride == 0 || data.is_empty() {
+        return;
+    }
+    #[cfg(feature = "parallel")]
+    {
+        use rayon::prelude::*;
+        data.par_chunks_mut(stride)
+            .enumerate()
+            .for_each(|(y, row)| f(y, row));
+    }
+    #[cfg(not(feature = "parallel"))]
+    {
+        for (y, row) in data.chunks_mut(stride).enumerate() {
+            f(y, row);
+        }
+    }
+}

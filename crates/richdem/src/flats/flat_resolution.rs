@@ -3,7 +3,7 @@
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 
-use crate::array2d::Array2D;
+use crate::array2d::{Array2D, for_each_row_mut};
 use crate::constants::{D8Flowdir, D8X, D8Y, DINF_NO_FLOW, NO_FLOW};
 use crate::error::{Error, Result};
 use crate::flowmet::d8_flowdirs::d8_flow_directions;
@@ -54,7 +54,7 @@ pub fn d8_flow_flats<U: DemNum>(
     }
     let no_flow = no_flow_sentinel::<U>();
 
-    let process_row = |y: usize, row: &mut [U]| {
+    for_each_row_mut(flowdirs.data_mut(), w, |y, row| {
         if y == 0 || y + 1 >= h {
             return;
         }
@@ -67,24 +67,7 @@ pub fn d8_flow_flats<U: DemNum>(
                 *dst = U::from_i64(d as i64);
             }
         }
-    };
-
-    #[cfg(feature = "parallel")]
-    {
-        use rayon::prelude::*;
-        flowdirs
-            .data_mut()
-            .par_chunks_mut(w)
-            .enumerate()
-            .for_each(|(y, row)| process_row(y, row));
-    }
-
-    #[cfg(not(feature = "parallel"))]
-    {
-        for (y, row) in flowdirs.data_mut().chunks_mut(w).enumerate() {
-            process_row(y, row);
-        }
-    }
+    });
 }
 
 fn build_away_gradient_fd<U: DemNum>(
@@ -313,7 +296,7 @@ pub fn d8_flats_alter_dem<T: DemNum>(
         return Ok(());
     }
 
-    let process_row = |y: usize, row: &mut [T]| {
+    for_each_row_mut(elevations.data_mut(), w, |y, row| {
         if y == 0 || y + 1 >= h {
             return;
         }
@@ -328,24 +311,7 @@ pub fn d8_flats_alter_dem<T: DemNum>(
             }
             *dst = cur;
         }
-    };
-
-    #[cfg(feature = "parallel")]
-    {
-        use rayon::prelude::*;
-        elevations
-            .data_mut()
-            .par_chunks_mut(w)
-            .enumerate()
-            .for_each(|(y, row)| process_row(y, row));
-    }
-
-    #[cfg(not(feature = "parallel"))]
-    {
-        for (y, row) in elevations.data_mut().chunks_mut(w).enumerate() {
-            process_row(y, row);
-        }
-    }
+    });
     Ok(())
 }
 

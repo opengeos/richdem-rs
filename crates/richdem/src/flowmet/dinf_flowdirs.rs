@@ -6,7 +6,7 @@
 
 use std::f64::consts::{PI, SQRT_2};
 
-use crate::array2d::Array2D;
+use crate::array2d::{Array2D, for_each_row_mut};
 use crate::constants::{DINF_NO_DATA, DINF_NO_FLOW};
 use crate::num::DemNum;
 
@@ -100,15 +100,10 @@ fn dinf_flow_dir<T: DemNum>(elevations: &Array2D<T>, x: usize, y: usize) -> f32 
 /// Calculates Tarboton (1997) D-infinity flow direction angles `[0, 2*pi)`.
 pub fn dinf_flow_directions<T: DemNum>(elevations: &Array2D<T>) -> Array2D<f32> {
     let w = elevations.width();
-    let h = elevations.height();
     let mut flowdirs = Array2D::<f32>::make_from_template(elevations, DINF_NO_FLOW);
     flowdirs.set_no_data(DINF_NO_DATA);
 
-    if w == 0 || h == 0 {
-        return flowdirs;
-    }
-
-    let process_row = |y: usize, row: &mut [f32]| {
+    for_each_row_mut(flowdirs.data_mut(), w, |y, row| {
         for (x, dst) in row.iter_mut().enumerate().take(w) {
             *dst = if elevations.is_no_data(x, y) {
                 DINF_NO_DATA
@@ -116,24 +111,7 @@ pub fn dinf_flow_directions<T: DemNum>(elevations: &Array2D<T>) -> Array2D<f32> 
                 dinf_flow_dir(elevations, x, y)
             };
         }
-    };
-
-    #[cfg(feature = "parallel")]
-    {
-        use rayon::prelude::*;
-        flowdirs
-            .data_mut()
-            .par_chunks_mut(w)
-            .enumerate()
-            .for_each(|(y, row)| process_row(y, row));
-    }
-
-    #[cfg(not(feature = "parallel"))]
-    {
-        for (y, row) in flowdirs.data_mut().chunks_mut(w).enumerate() {
-            process_row(y, row);
-        }
-    }
+    });
 
     flowdirs
 }
