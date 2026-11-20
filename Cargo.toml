@@ -4,7 +4,7 @@ members = ["crates/richdem", "crates/richdem-cli"]
 exclude = ["python"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 license = "GPL-3.0-only"
 rust-version = "1.90"
@@ -12,7 +12,7 @@ repository = "https://github.com/opengeos/richdem-rs"
 authors = ["Richard Barnes <rbarnes@umn.edu>", "Qiusheng Wu <giswqs@gmail.com>"]
 
 [workspace.dependencies]
-richdem = { path = "crates/richdem", version = "0.1.0" }
+richdem = { path = "crates/richdem", version = "0.2.0" }
 terrio = { version = "0.9", default-features = false, features = ["geotiff"] }
 rayon = "1.10"
 thiserror = "2"

@@ -42,7 +42,7 @@ Add `richdem` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-richdem = "0.1"
+richdem = "0.2"
 ```
 
 ```rust,no_run

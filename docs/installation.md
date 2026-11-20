@@ -47,7 +47,7 @@ Or manually:
 
 ```toml
 [dependencies]
-richdem = "0.1"
+richdem = "0.2"
 ```
 
 ### Cargo Features
@@ -62,7 +62,7 @@ To compile without raster I/O or parallelism (e.g., for embedded or single-threa
 
 ```toml
 [dependencies]
-richdem = { version = "0.1", default-features = false }
+richdem = { version = "0.2", default-features = false }
 ```
 
 ## Command-Line Interface (`richdem`)
@@ -84,11 +84,11 @@ powershell -ExecutionPolicy ByPass -c "irm https://richdem-rs.opengeos.org/insta
 Set `RICHDEM_VERSION` to install a specific release, or `RICHDEM_INSTALL_DIR` to choose another directory:
 
 ```sh
-curl -LsSf https://richdem-rs.opengeos.org/install.sh | RICHDEM_VERSION=0.1.0 sh
+curl -LsSf https://richdem-rs.opengeos.org/install.sh | RICHDEM_VERSION=0.2.0 sh
 ```
 
 ```powershell
-$env:RICHDEM_VERSION = "0.1.0"; irm https://richdem-rs.opengeos.org/install.ps1 | iex
+$env:RICHDEM_VERSION = "0.2.0"; irm https://richdem-rs.opengeos.org/install.ps1 | iex
 ```
 
 On Windows, the installer adds the install directory to your user `PATH` (set `RICHDEM_NO_MODIFY_PATH=1` to skip). On Linux/macOS, it prints the `export PATH=...` line if needed. Re-run the installer anytime to upgrade.
