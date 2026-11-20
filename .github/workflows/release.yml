@@ -1,0 +1,101 @@
+name: Release
+
+# On version tags (`v*`), publishes Python wheels + sdist (`richdem-rs`) to PyPI, publishes
+# `richdem` and `richdem-cli` to crates.io, and attaches prebuilt CLI binaries to the GitHub
+# Release. Both registries use OIDC trusted publishing via the `pypi` and `crates-io` GitHub
+# environments (no long-lived API tokens stored in repository secrets).
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    uses: ./.github/workflows/release-build.yml
+
+  publish:
+    name: Publish to PyPI
+    needs: [build]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: wheels-*
+          path: dist
+          merge-multiple: true
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sdist
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+        with:
+          packages-dir: dist
+
+  crates:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment: crates-io
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master; toolchain set by input
+        with:
+          toolchain: stable
+      # crates.io trusted publishing requires each crate to exist before configuring its
+      # trusted publisher (owner: opengeos, repo: richdem-rs, workflow: release.yml,
+      # environment: crates-io). Check upfront before authenticating.
+      - name: Verify richdem and richdem-cli have been bootstrapped on crates.io
+        run: |
+          for crate in richdem richdem-cli; do
+            if ! curl --fail --silent --show-error -A "richdem-rs release (https://github.com/opengeos/richdem-rs)" "https://crates.io/api/v1/crates/$crate" > /dev/null; then
+              echo "::error::Publish $crate manually once (cargo publish -p $crate) and configure its crates.io trusted publisher (opengeos/richdem-rs, release.yml, environment crates-io) before tagging."
+              exit 1
+            fi
+          done
+      - uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
+        id: auth
+      # Versions already on crates.io (e.g. a manually bootstrapped 0.1.0) are skipped cleanly.
+      - name: Publish richdem, then richdem-cli
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          metadata=$(cargo metadata --no-deps --format-version 1)
+          for crate in richdem richdem-cli; do
+            version=$(echo "$metadata" | jq -r --arg crate "$crate" '.packages[] | select(.name == $crate) | .version')
+            if curl -sf -A "richdem-rs release (https://github.com/opengeos/richdem-rs)" "https://crates.io/api/v1/crates/$crate/$version" > /dev/null; then
+              echo "$crate $version is already on crates.io"
+            else
+              cargo publish -p "$crate"
+            fi
+          done
+
+  github-release:
+    name: Create GitHub Release
+    needs: [build, publish, crates]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: cli-*
+          path: dist
+          merge-multiple: true
+      - name: Attach CLI archives to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          gh release view "$tag" > /dev/null 2>&1 || gh release create "$tag" --verify-tag --generate-notes
+          gh release upload "$tag" dist/richdem-cli-* --clobber
