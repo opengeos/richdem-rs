@@ -403,7 +403,7 @@ def get_depression_hierarchy(
     if labels.dtype != np.uint32 or not labels.flags["C_CONTIGUOUS"]:
         raise TypeError("labels must be a C-contiguous uint32 rdarray")
     dh, fds = depression_hierarchy.get_depression_hierarchy_py(
-        dem_f64, labels, topology
+        dem_f64, labels, topology, float(dem.no_data)
     )
     flowdirs = rdarray(
         fds,
@@ -433,6 +433,7 @@ def fill_spill_merge(
         np.ascontiguousarray(flowdirs, dtype=np.int8),
         deps,
         wtd,
+        float(dem.no_data),
     )
 
 

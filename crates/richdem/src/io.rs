@@ -24,10 +24,12 @@ pub fn load_dynamic(path: impl AsRef<Path>) -> Result<DynamicArray2D> {
         Err(terrio_err) => {
             // Fall back to direct ESRI ASCII Grid parsing for RichDEM test fixtures
             // with extensions like `.dem`, `.d8`, `.out`.
-            if let Ok(arr) = Array2D::<f64>::load_ascii_grid(path) {
-                Ok(DynamicArray2D::F64(arr))
-            } else {
-                Err(Error::Terrio(terrio_err))
+            match Array2D::<f64>::load_ascii_grid(path) {
+                Ok(arr) => Ok(DynamicArray2D::F64(arr)),
+                Err(ascii_err) => Err(Error::Parse(format!(
+                    "failed to open '{}' via terrio ({terrio_err}) or ESRI ASCII Grid fallback ({ascii_err})",
+                    path.display()
+                ))),
             }
         }
     }
@@ -50,7 +52,12 @@ pub fn load_raster<T: DemNum>(
         }
         Err(terrio_err) => match Array2D::<T>::load_ascii_grid(path) {
             Ok(a) => a,
-            Err(_) => return Err(Error::Terrio(terrio_err)),
+            Err(ascii_err) => {
+                return Err(Error::Parse(format!(
+                    "failed to open '{}' via terrio ({terrio_err}) or ESRI ASCII Grid fallback ({ascii_err})",
+                    path.display()
+                )));
+            }
         },
     };
 
@@ -158,7 +165,8 @@ pub fn dataset_to_dynamic(ds: RasterDataset, filename: &str) -> Result<DynamicAr
         ))
     })?;
     let gt = ds.geo_transform();
-    let proj = ds.crs().to_wkt().unwrap_or_default();
+    let crs = ds.crs();
+    let proj = crs.to_wkt().or_else(|| crs.to_proj4()).unwrap_or_default();
     let nodata_opt = ds.nodata();
     let metadata = ds.raster.metadata.iter().cloned().collect();
 

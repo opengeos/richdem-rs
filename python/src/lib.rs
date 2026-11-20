@@ -533,14 +533,16 @@ fn generate_perlin_terrain_py<'py>(
 }
 
 #[pyfunction]
+#[pyo3(signature = (dem, labels, topology, no_data=-9999.0))]
 fn get_depression_hierarchy_py<'py>(
     py: Python<'py>,
     dem: PyReadonlyArray2<'_, f64>,
     mut labels: PyReadwriteArray2<'_, u32>,
     topology: &str,
+    no_data: f64,
 ) -> PyResult<(Vec<PyDepression>, Bound<'py, PyArray2<i8>>)> {
     let topo = parse_topology(topology)?;
-    let rd_dem = from_py_array2_f64(dem, -9999.0, None)?;
+    let rd_dem = from_py_array2_f64(dem, no_data, None)?;
     let (h, w) = (rd_dem.height(), rd_dem.width());
 
     let mut lbl_view = labels.as_array_mut();
@@ -570,15 +572,17 @@ fn get_depression_hierarchy_py<'py>(
 }
 
 #[pyfunction]
+#[pyo3(signature = (dem, labels, flowdirs, deps, wtd, no_data=-9999.0))]
 fn fill_spill_merge_py(
     dem: PyReadonlyArray2<'_, f64>,
     labels: PyReadonlyArray2<'_, u32>,
     flowdirs: PyReadonlyArray2<'_, i8>,
     deps: Vec<Py<PyDepression>>,
     mut wtd: PyReadwriteArray2<'_, f64>,
+    no_data: f64,
     py: Python<'_>,
 ) -> PyResult<()> {
-    let rd_dem = from_py_array2_f64(dem, -9999.0, None)?;
+    let rd_dem = from_py_array2_f64(dem, no_data, None)?;
     let (h, w) = (rd_dem.height(), rd_dem.width());
 
     let lbl_view = labels.as_array();

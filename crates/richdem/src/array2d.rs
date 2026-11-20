@@ -664,6 +664,7 @@ impl<T: DemNum> Array2D<T> {
         let mut dx: Option<f64> = None;
         let mut dy: Option<f64> = None;
         let mut nodata: Option<T> = None;
+        let mut nodata_f64: Option<f64> = None;
         let mut first_data_line: Option<String> = None;
 
         for line_res in &mut lines {
@@ -763,6 +764,7 @@ impl<T: DemNum> Array2D<T> {
                     let v = parts
                         .next()
                         .ok_or_else(|| Error::Parse("missing NODATA_value".into()))?;
+                    nodata_f64 = v.parse::<f64>().ok();
                     let parsed_nd = match v.parse::<T>() {
                         Ok(val) => val,
                         Err(_) => {
@@ -790,15 +792,24 @@ impl<T: DemNum> Array2D<T> {
             ))
         })?;
 
-        let mut data = Vec::with_capacity(expected);
+        // Cap initial preallocation so a malformed header with huge dimensions
+        // cannot trigger an immediate OOM abort before reading pixel tokens.
+        const MAX_INITIAL_CAP: usize = 1_048_576;
+        let mut data = Vec::with_capacity(expected.min(MAX_INITIAL_CAP));
         let parse_token = |tok: &str| -> Result<T> {
             match tok.parse::<T>() {
                 Ok(v) => Ok(v),
                 Err(_) => {
-                    let f = tok
-                        .parse::<f64>()
-                        .map_err(|e| Error::Parse(format!("invalid cell value '{tok}': {e}")))?;
-                    Ok(T::from_nodata_f64(f))
+                    if let (Some(nd_val), Some(nd_f)) = (nodata, nodata_f64)
+                        && let Ok(f) = tok.parse::<f64>()
+                        && ((f.is_nan() && nd_f.is_nan()) || f == nd_f)
+                    {
+                        return Ok(nd_val);
+                    }
+                    Err(Error::Parse(format!(
+                        "invalid cell value '{tok}' for {}",
+                        T::type_name()
+                    )))
                 }
             }
         };

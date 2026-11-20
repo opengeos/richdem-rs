@@ -154,13 +154,13 @@ enum Commands {
         /// Output flow accumulation raster
         output: PathBuf,
         /// Flow accumulation method (D8, D4, Tarboton, Dinf, Quinn, Holmgren, Freeman, Rho8, Rho4)
-        #[arg(short = 'm', long, default_value = "D8")]
-        method: String,
+        #[arg(short = 'm', long)]
+        method: Option<String>,
         /// Exponent for Holmgren or Freeman methods
         #[arg(short = 'e', long)]
         exponent: Option<f64>,
         /// Treat input as precomputed RichDEM D8 flow directions
-        #[arg(long)]
+        #[arg(long, conflicts_with_all = ["method", "exponent"])]
         from_d8: bool,
         /// Compress output GeoTIFF
         #[arg(short = 'c', long)]
@@ -491,7 +491,8 @@ fn run() -> richdem::Result<()> {
                 let accum = d8_flow_accum::<u8, i32>(&fds);
                 save_raster(&accum, &output, Some(&cmdline), compress)?;
             } else {
-                let m = FlowAccumMethod::parse(&method)?;
+                let method_name = method.as_deref().unwrap_or("D8");
+                let m = FlowAccumMethod::parse(method_name)?;
                 let dem = load_raster::<f64>(&input, None)?;
                 let mut accum = Array2D::<f64>::make_from_template(&dem, 1.0);
                 flow_accumulation_by_method(&dem, &mut accum, m, exponent)?;
@@ -518,7 +519,11 @@ fn run() -> richdem::Result<()> {
             let planar = (dem.num_data_cells() as f64) * dem.get_cell_area();
             println!("Topographic surface area = {area}");
             println!("Planar surface area      = {planar}");
-            println!("Ratio                    = {}", area / planar);
+            if planar > 0.0 {
+                println!("Ratio                    = {}", area / planar);
+            } else {
+                println!("Ratio                    = n/a");
+            }
         }
 
         Commands::DepressionHierarchy {
@@ -892,8 +897,8 @@ fn run() -> richdem::Result<()> {
             height,
         } => {
             let arr = load_raster::<f64>(&input, None)?;
-            let x_end = (x + width).min(arr.width());
-            let y_end = (y + height).min(arr.height());
+            let x_end = x.saturating_add(width).min(arr.width());
+            let y_end = y.saturating_add(height).min(arr.height());
             for row in y..y_end {
                 for col in x..x_end {
                     if col > x {
