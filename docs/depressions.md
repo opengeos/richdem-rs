@@ -8,9 +8,9 @@ All Priority-Flood variants preserve NoData cells and support both `D8` (8-neigh
 
 | Algorithm | Rust Function | Complexity / Notes |
 |---|---|---|
-| Wei et al. (2018) | `priority_flood_wei2018` | Fastest general-purpose Priority-Flood (default behind `fill_depressions`) |
-| Zhou et al. (2016) | `priority_flood_zhou2016` | High-speed variant minimizing priority-queue pushes |
-| Barnes et al. (2014) Improved | `priority_flood_barnes2014` | Classic FIFO-pit + priority-queue Priority-Flood |
+| Wei et al. (2018) | `priority_flood_wei2018` | Fastest Priority-Flood in [Benchmarks](benchmarks.md) (52.2 M cells/s); called directly |
+| Zhou et al. (2016) | `priority_flood_zhou2016` | High-speed Priority-Flood minimizing heap pushes (default behind `fill_depressions` for D8) |
+| Barnes et al. (2014) Improved | `priority_flood_barnes2014` | Classic FIFO-pit + priority-queue Priority-Flood (default behind `fill_depressions` for D4) |
 | Barnes et al. (2014) Original | `priority_flood_original` | Reference Priority-Flood without FIFO pit queue |
 | Priority-Flood + Epsilon | `priority_flood_epsilon_barnes2014` / `fill_depressions_epsilon` | Imposes minimal `next_up` floating-point downhill gradients across filled flats (floating-point DEMs only) |
 | Max-Area Filling | `priority_flood_barnes2014_max_dep` | Fills only depressions below a maximum cell count |
@@ -22,7 +22,7 @@ All Priority-Flood variants preserve NoData cells and support both `D8` (8-neigh
 ```python
 import richdem_rs as rd
 
-# Fill depressions (Zhou 2016 / Wei 2018)
+# Fill depressions (Zhou 2016 for D8, Barnes 2014 for D4)
 filled = rd.FillDepressions(dem, epsilon=False, topology="D8")
 
 # Fill with minimal downhill epsilon gradients (recommended before flow routing)
