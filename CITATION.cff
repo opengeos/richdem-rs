@@ -1,0 +1,36 @@
+cff-version: 1.2.0
+message: "If you use richdem-rs in your work, please cite the original RichDEM software by Richard Barnes as well as the specific algorithm publications."
+title: "richdem-rs: High-Performance Terrain and Hydrologic Analysis in Pure Rust"
+type: software
+license: GPL-3.0-only
+repository-code: "https://github.com/opengeos/richdem-rs"
+authors:
+  - family-names: Barnes
+    given-names: Richard
+    affiliation: "University of Minnesota / Lawrence Berkeley National Laboratory"
+  - family-names: Wu
+    given-names: Qiusheng
+    affiliation: "University of Tennessee, Knoxville"
+references:
+  - type: software
+    title: "RichDEM: Terrain Analysis Software"
+    authors:
+      - family-names: Barnes
+        given-names: Richard
+    year: 2016
+    url: "https://github.com/r-barnes/richdem"
+  - type: article
+    title: "Priority-flood: An optimal depression-filling and watershed-labeling algorithm for digital elevation models"
+    authors:
+      - family-names: Barnes
+        given-names: Richard
+      - family-names: Lehman
+        given-names: Clarence
+      - family-names: Mulla
+        given-names: David
+    journal: "Computers & Geosciences"
+    volume: 62
+    start: 117
+    end: 127
+    year: 2014
+    doi: "10.1016/j.cageo.2013.04.024"
