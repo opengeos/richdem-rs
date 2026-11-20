@@ -130,8 +130,24 @@ def RdCompare() -> None:
 
     ds1 = rd.LoadGDAL(args.rda1)
     ds2 = rd.LoadGDAL(args.rda2)
-    diff = np.asarray(ds1, dtype=np.float64) - np.asarray(ds2, dtype=np.float64)
-    print(f"Absolute Max difference: {np.nanmax(np.abs(diff)):10.6}")
-    print(f"Absolute Min difference: {np.nanmin(np.abs(diff)):10.6}")
-    print(f"Absolute Avg difference: {np.mean(np.abs(diff)):10.6}")
-    print(f"RMS difference:          {np.sqrt(np.mean(np.square(diff))):10.6}")
+    a = np.asarray(ds1, dtype=np.float64)
+    b = np.asarray(ds2, dtype=np.float64)
+    a_missing = (a == float(ds1.no_data)) | ~np.isfinite(a)
+    b_missing = (b == float(ds2.no_data)) | ~np.isfinite(b)
+    validity_mismatch = int(np.sum(a_missing != b_missing))
+    if validity_mismatch > 0:
+        print(f"Validity mismatch cells: {validity_mismatch}")
+    valid = ~a_missing & ~b_missing
+    diff = (a - b)[valid]
+    if diff.size == 0:
+        max_diff = min_diff = avg_diff = rms_diff = 0.0
+    else:
+        abs_diff = np.abs(diff)
+        max_diff = float(np.max(abs_diff))
+        min_diff = float(np.min(abs_diff))
+        avg_diff = float(np.mean(abs_diff))
+        rms_diff = float(np.sqrt(np.mean(np.square(diff))))
+    print(f"Absolute Max difference: {max_diff:10.6}")
+    print(f"Absolute Min difference: {min_diff:10.6}")
+    print(f"Absolute Avg difference: {avg_diff:10.6}")
+    print(f"RMS difference:          {rms_diff:10.6}")

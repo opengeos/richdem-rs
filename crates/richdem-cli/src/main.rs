@@ -1,7 +1,6 @@
 //! Command-line interface for richdem-rs, covering RichDEM's `rd_*` utilities
 //! with pure-Rust raster I/O via `terrio`.
 
-use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -826,13 +825,22 @@ fn run() -> richdem::Result<()> {
 
         Commands::Hist { input } => {
             let arr = load_raster::<f64>(&input, None)?;
-            let mut counts: BTreeMap<String, usize> = BTreeMap::new();
-            for &v in arr.data() {
-                *counts.entry(format!("{v}")).or_insert(0) += 1;
-            }
+            let mut vals = arr.data().to_vec();
+            vals.sort_by(f64::total_cmp);
             println!("NoData: {}", arr.no_data());
-            for (k, c) in counts {
+            let mut i = 0;
+            while i < vals.len() {
+                let v = vals[i];
+                let mut j = i + 1;
+                while j < vals.len()
+                    && ((v.is_nan() && vals[j].is_nan()) || (!v.is_nan() && vals[j] == v))
+                {
+                    j += 1;
+                }
+                let k = format!("{v}");
+                let c = j - i;
                 println!("{k:>20} {c:>20}");
+                i = j;
             }
         }
 
