@@ -105,11 +105,27 @@ def test_python_review_regression_cases() -> None:
     with pytest.raises(TypeError):
         rd.FlowAccumulation(filled, method="Dinf", weights=int_weights, in_place=True)
 
-    # 4. ArcGIS conversion preserves NoData=255
+    # 4. ArcGIS & TauDEM conversions preserve NoData=255
     arc = rd.rdarray(np.array([[1, 16, 255]], dtype=np.uint8), no_data=255)
     rd_d8 = rd.convert_arc_flowdirs_to_richdem_d8(arc)
     assert int(rd_d8.no_data) == 255
     assert list(rd_d8[0]) == [5, 1, 255]
+
+    taudem = rd.rdarray(np.array([[1, 5, 255]], dtype=np.uint8), no_data=255)
+    rd_td = rd.convert_taudem_d8_to_richdem_d8(taudem)
+    assert int(rd_td.no_data) == 255
+    assert list(rd_td[0]) == [5, 1, 255]
+
+    # 4b. Big-endian arrays save cleanly via SaveGDAL
+    be_arr = rd.rdarray(
+        np.array([[1.5, 2.5]], dtype=">f4"),
+        no_data=-9999.0,
+    )
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tif = Path(tmpdir) / "be.tif"
+        rd.SaveGDAL(str(tif), be_arr)
+        loaded_be = rd.LoadGDAL(str(tif))
+        assert np.allclose(np.asarray(loaded_be), np.array([[1.5, 2.5]]))
 
     # 5. Shape mismatch rejected in get_depression_hierarchy
     dem6 = rd.rdarray(np.zeros((6, 6), dtype=np.float64), no_data=-9999.0)

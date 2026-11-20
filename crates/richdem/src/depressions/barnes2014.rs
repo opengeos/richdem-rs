@@ -282,17 +282,20 @@ pub fn priority_flood_flowdirs_barnes2014<T: DemNum>(
         return flowdirs;
     }
 
+    let no_data = elevations.no_data();
+    let prio = |v: T| -> T { if v.rd_eq(no_data) { T::NEG_INFINITY } else { v } };
+
     for x in 0..w {
         let v = elevations.get(x, 0);
-        open.emplace(x as i32, 0, v);
-        if !v.rd_eq(elevations.no_data()) {
+        open.emplace(x as i32, 0, prio(v));
+        if !v.rd_eq(no_data) {
             flowdirs.set(x, 0, 3);
         }
         closed.set(x, 0, 1);
         if h > 1 {
             let vb = elevations.get(x, h - 1);
-            open.emplace(x as i32, (h - 1) as i32, vb);
-            if !vb.rd_eq(elevations.no_data()) {
+            open.emplace(x as i32, (h - 1) as i32, prio(vb));
+            if !vb.rd_eq(no_data) {
                 flowdirs.set(x, h - 1, 7);
             }
             closed.set(x, h - 1, 1);
@@ -300,15 +303,15 @@ pub fn priority_flood_flowdirs_barnes2014<T: DemNum>(
     }
     for y in 1..h.saturating_sub(1) {
         let vl = elevations.get(0, y);
-        open.emplace(0, y as i32, vl);
-        if !vl.rd_eq(elevations.no_data()) {
+        open.emplace(0, y as i32, prio(vl));
+        if !vl.rd_eq(no_data) {
             flowdirs.set(0, y, 1);
         }
         closed.set(0, y, 1);
         if w > 1 {
             let vr = elevations.get(w - 1, y);
-            open.emplace((w - 1) as i32, y as i32, vr);
-            if !vr.rd_eq(elevations.no_data()) {
+            open.emplace((w - 1) as i32, y as i32, prio(vr));
+            if !vr.rd_eq(no_data) {
                 flowdirs.set(w - 1, y, 5);
             }
             closed.set(w - 1, y, 1);
@@ -329,7 +332,6 @@ pub fn priority_flood_flowdirs_barnes2014<T: DemNum>(
     }
 
     const D8_ORDER: [usize; 9] = [0, 1, 3, 5, 7, 2, 4, 6, 8];
-    let no_data = elevations.no_data();
     let fd_nd = flowdirs.no_data();
 
     while let Some(c) = open.pop() {
@@ -343,10 +345,11 @@ pub fn priority_flood_flowdirs_barnes2014<T: DemNum>(
             let nz = elevations.get_xy(nx, ny);
             if nz.rd_eq(no_data) {
                 flowdirs.set_xy(nx, ny, fd_nd);
+                open.emplace(nx, ny, T::NEG_INFINITY);
             } else {
                 flowdirs.set_xy(nx, ny, D8_INVERSE[n]);
+                open.emplace(nx, ny, nz);
             }
-            open.emplace(nx, ny, nz);
         }
     }
 

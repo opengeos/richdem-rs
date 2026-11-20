@@ -67,7 +67,7 @@ pub struct Depression<T: DemNum> {
     /// Sum of elevations of all cells contained within this depression and its children.
     pub total_elevation: f64,
     /// Topology (`D8` or `D4`) used to build this hierarchy (stored on the root `OCEAN` node).
-    #[cfg_attr(feature = "serde", serde(skip, default = "default_topology"))]
+    #[cfg_attr(feature = "serde", serde(default = "default_topology"))]
     pub topology: Topology,
 }
 
@@ -185,7 +185,7 @@ pub fn get_depression_hierarchy<T: DemNum>(
     let mut has_ocean = false;
     let nd = dem.no_data();
 
-    // First validate labels and classify NoData cells as OCEAN (matching Barnes 2020 reference).
+    // Pass 1: validate all labels without mutating `label` so errors leave it untouched.
     for y in 0..h {
         for x in 0..w {
             let l = label.get(x, y);
@@ -194,10 +194,7 @@ pub fn get_depression_hierarchy<T: DemNum>(
                     "Label array given to get_depression_hierarchy must contain only NO_DEP and OCEAN labels!".into(),
                 ));
             }
-            if dem.get(x, y).rd_eq(nd) {
-                label.set(x, y, OCEAN);
-            }
-            if label.get(x, y) == OCEAN {
+            if l == OCEAN || dem.get(x, y).rd_eq(nd) {
                 has_ocean = true;
             }
         }
@@ -207,6 +204,15 @@ pub fn get_depression_hierarchy<T: DemNum>(
         return Err(Error::InvalidArgument(
             "No OCEAN cells found, could not make a DepressionHierarchy!".into(),
         ));
+    }
+
+    // Pass 2: classify NoData cells as OCEAN (matching Barnes 2020 reference).
+    for y in 0..h {
+        for x in 0..w {
+            if dem.get(x, y).rd_eq(nd) {
+                label.set(x, y, OCEAN);
+            }
+        }
     }
 
     // Clear any stale flow directions before flood assignment.
@@ -242,8 +248,7 @@ pub fn get_depression_hierarchy<T: DemNum>(
     });
 
     if ocean_seeds.is_empty() {
-        // All cells are OCEAN (no land cells to process).
-        calculate_total_volumes(&mut depressions);
+        // All cells are OCEAN (no land cells to process; keep initialized zero dep_vol).
         return Ok(depressions);
     }
 

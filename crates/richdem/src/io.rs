@@ -213,6 +213,10 @@ pub fn dataset_to_dynamic(ds: RasterDataset, filename: &str) -> Result<DynamicAr
 }
 
 /// Converts a typed [`Array2D<T>`] into a single-band [`terrio::RasterDataset`].
+///
+/// Pixel buffers are preserved in their exact native type (including 64-bit integers).
+/// Note that `terrio::RasterConfig::nodata` is currently stored as `f64`, so 64-bit
+/// integer NoData sentinels above `2^53` are rounded to the nearest `f64`.
 pub fn array2d_to_dataset<T: DemNum>(arr: &Array2D<T>) -> Result<RasterDataset> {
     let (data_type, raster_data) = match T::type_name() {
         "uint8" => (

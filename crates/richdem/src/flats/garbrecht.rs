@@ -26,7 +26,7 @@ fn collect_flats(flowdirs: &Array2D<D8Flowdir>) -> Vec<GridCell> {
 }
 
 /// Computes the Garbrecht-Martz gradient towards lower terrain via O(N) multi-source BFS
-/// seeded from drainable flat cells (flat cells adjacent to a strictly lower draining cell).
+/// seeded from unresolved flat cells adjacent to equal-or-lower flowing outlets.
 /// Undrainable flat components (with no outlet) are never visited and remain at `0`.
 fn gradient_towards_lower<T: DemNum>(
     elevations: &Array2D<T>,
@@ -42,7 +42,7 @@ fn gradient_towards_lower<T: DemNum>(
 
     for c in flats {
         let ce = elevations.get_xy(c.x, c.y);
-        let mut touches_lower_draining = false;
+        let mut touches_outlet = false;
         for n in 1..=8 {
             let nx = c.x + D8X[n];
             let ny = c.y + D8Y[n];
@@ -51,17 +51,18 @@ fn gradient_towards_lower<T: DemNum>(
             }
             let ne = elevations.get_xy(nx, ny);
             let nfd = flowdirs.get_xy(nx, ny);
-            if ne.rd_cmp(ce) == Ordering::Less
+            if ne.rd_cmp(ce) != Ordering::Greater
                 && nfd != NO_FLOW as u8
                 && !flowdirs.is_no_data_xy(nx, ny)
             {
-                touches_lower_draining = true;
+                touches_outlet = true;
                 break;
             }
         }
-        if touches_lower_draining {
+        if touches_outlet {
             visited.set_xy(c.x, c.y, 1);
-            inc1.set_xy(c.x, c.y, 0);
+            // Positive initial increment so recomputed D8 directions flow into the equal-elevation outlet.
+            inc1.set_xy(c.x, c.y, 1);
             queue.push_back(*c);
             drainable_flats.push(*c);
         }

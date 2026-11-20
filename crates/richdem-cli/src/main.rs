@@ -641,7 +641,7 @@ fn run() -> richdem::Result<()> {
                     }
                     (false, false) => {}
                 }
-                let d = (va - vb).abs();
+                let d = if va == vb { 0.0 } else { (va - vb).abs() };
                 max_diff = max_diff.max(d);
                 min_diff = min_diff.min(d);
                 sum_abs += d;
@@ -830,7 +830,11 @@ fn run() -> richdem::Result<()> {
 
         Commands::Hist { input } => {
             let arr = load_raster::<f64>(&input, None)?;
-            let mut vals = arr.data().to_vec();
+            let mut vals: Vec<f64> = arr
+                .data()
+                .iter()
+                .map(|&v| if v.is_nan() { f64::NAN } else { v })
+                .collect();
             vals.sort_by(f64::total_cmp);
             println!("NoData: {}", arr.no_data());
             let mut i = 0;

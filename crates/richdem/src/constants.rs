@@ -105,6 +105,7 @@ pub const DINF_NO_FLOW: f32 = -2.0;
 
 /// Grid connectivity topology (8-neighbor or 4-neighbor).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Topology {
     /// 8-neighbor connectivity (cardinal + diagonal).
     D8,

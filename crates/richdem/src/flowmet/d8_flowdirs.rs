@@ -34,7 +34,13 @@ fn d8_flow_dir<T: DemNum>(elevations: &Array2D<T>, x: usize, y: usize) -> D8Flow
     for n in 1..=8 {
         let nx = x as i32 + D8X[n];
         let ny = y as i32 + D8Y[n];
+        if elevations.is_no_data_xy(nx, ny) {
+            continue;
+        }
         let ne = elevations.get_xy(nx, ny);
+        if ne.is_nan() {
+            continue;
+        }
         let cmp = ne.rd_cmp(min_elev);
         if cmp == Ordering::Less
             || (cmp == Ordering::Equal && flowdir > 0 && flowdir.is_multiple_of(2) && n % 2 == 1)

@@ -53,12 +53,18 @@ fn dinf_flow_dir<T: DemNum>(elevations: &Array2D<T>, x: usize, y: usize) -> f32 
     let dang = 1.0f64.atan2(1.0);
 
     for n in 0..8 {
-        let e1 = elevations
-            .get_xy(x as i32 + DX_E1[n], y as i32 + DY_E1[n])
-            .to_f64();
-        let e2 = elevations
-            .get_xy(x as i32 + DX_E2[n], y as i32 + DY_E2[n])
-            .to_f64();
+        let x1 = x as i32 + DX_E1[n];
+        let y1 = y as i32 + DY_E1[n];
+        let x2 = x as i32 + DX_E2[n];
+        let y2 = y as i32 + DY_E2[n];
+        if elevations.is_no_data_xy(x1, y1) || elevations.is_no_data_xy(x2, y2) {
+            continue;
+        }
+        let e1 = elevations.get_xy(x1, y1).to_f64();
+        let e2 = elevations.get_xy(x2, y2).to_f64();
+        if e1.is_nan() || e2.is_nan() {
+            continue;
+        }
 
         let s1 = e0 - e1;
         let s2 = e1 - e2;

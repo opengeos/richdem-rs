@@ -22,13 +22,29 @@ pub fn flow_accumulation<A: DemNum>(props: &Array3D<f32>, accum: &mut Array2D<A>
         ));
     }
 
+    let p_data = props.data();
+    let p_nd = props.no_data();
+
+    // Validate all non-NoData proportion values are finite before mutating `accum`.
+    for ci in 0..(w * h) {
+        let p_base = ci * 9;
+        if p_data[p_base].rd_eq(p_nd) {
+            continue;
+        }
+        for n in 1..=8 {
+            if !p_data[p_base + n].is_finite() {
+                return Err(Error::InvalidArgument(format!(
+                    "non-finite flow proportion at cell {ci}, neighbor {n}"
+                )));
+            }
+        }
+    }
+
     accum.set_no_data(A::from_i64(ACCUM_NO_DATA as i64));
 
     let mut deps = vec![0i8; w * h];
     let wi = w as isize;
     let n_offsets: [isize; 9] = [0, -1, -1 - wi, -wi, 1 - wi, 1, 1 + wi, wi, -1 + wi];
-    let p_data = props.data();
-    let p_nd = props.no_data();
     let wi32 = w as i32;
     let hi32 = h as i32;
 

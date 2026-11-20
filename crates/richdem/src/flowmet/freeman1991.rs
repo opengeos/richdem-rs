@@ -28,8 +28,8 @@ pub fn fm_freeman<T: DemNum>(elevations: &Array2D<T>, xparam: f64) -> Array3D<f3
             }
 
             let e = elevations.get(x, y);
-            let mut weights = [0.0f64; 9];
-            let mut c_sum = 0.0f64;
+            let mut grads = [0.0f64; 9];
+            let mut max_grad = 0.0f64;
 
             for n in 1..=8 {
                 let nx = x as i32 + D8X[n];
@@ -41,19 +41,34 @@ pub fn fm_freeman<T: DemNum>(elevations: &Array2D<T>, xparam: f64) -> Array3D<f3
                 if ne.rd_cmp(e) == Ordering::Less {
                     let rise = e.to_f64() - ne.to_f64();
                     let grad = rise / DR[n];
-                    let cval = grad.powf(xparam);
-                    weights[n] = cval;
-                    c_sum += cval;
+                    if grad > 0.0 && grad.is_finite() {
+                        grads[n] = grad;
+                        if grad > max_grad {
+                            max_grad = grad;
+                        }
+                    }
                 }
             }
 
-            if c_sum > 0.0 {
-                props.set(x, y, 0, HAS_FLOW_GEN);
-                for (n, &wval) in weights.iter().enumerate().skip(1) {
-                    if wval > 0.0 {
-                        props.set(x, y, n, (wval / c_sum) as f32);
-                    } else {
-                        props.set(x, y, n, 0.0);
+            if max_grad > 0.0 {
+                let mut weights = [0.0f64; 9];
+                let mut c_sum = 0.0f64;
+                for n in 1..=8 {
+                    if grads[n] > 0.0 {
+                        // Rescale by max_grad so large exponents cannot overflow to inf/inf = NaN.
+                        let cval = (grads[n] / max_grad).powf(xparam);
+                        weights[n] = cval;
+                        c_sum += cval;
+                    }
+                }
+                if c_sum > 0.0 {
+                    props.set(x, y, 0, HAS_FLOW_GEN);
+                    for (n, &wval) in weights.iter().enumerate().skip(1) {
+                        if wval > 0.0 {
+                            props.set(x, y, n, (wval / c_sum) as f32);
+                        } else {
+                            props.set(x, y, n, 0.0);
+                        }
                     }
                 }
             }

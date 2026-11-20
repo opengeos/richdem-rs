@@ -130,7 +130,8 @@ fn run_suite(size: usize, iters: usize) {
     print_row("DepressionHierarchy + FillSpillMerge", cells, d_dh_fsm);
 
     // Pure-Rust GeoTIFF I/O via terrio
-    let tmp_path = std::env::temp_dir().join(format!("richdem_rs_bench_{size}.tif"));
+    let tmp_dir = tempfile::tempdir().unwrap();
+    let tmp_path = tmp_dir.path().join(format!("richdem_rs_bench_{size}.tif"));
     let d_write = bench_median(1, iters, || {
         save_raster(&filled_eps, &tmp_path, None, false).unwrap();
     });
@@ -140,7 +141,7 @@ fn run_suite(size: usize, iters: usize) {
         let _r = load_raster::<f64>(&tmp_path, None).unwrap();
     });
     print_row("GeoTIFF Read (terrio, uncompressed)", cells, d_read);
-    let _ = std::fs::remove_file(&tmp_path);
+    drop(tmp_dir);
 }
 
 fn main() {

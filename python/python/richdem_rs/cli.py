@@ -130,18 +130,43 @@ def RdCompare() -> None:
 
     ds1 = rd.LoadGDAL(args.rda1)
     ds2 = rd.LoadGDAL(args.rda2)
-    a = np.asarray(ds1, dtype=np.float64)
-    b = np.asarray(ds2, dtype=np.float64)
-    a_missing = (a == float(ds1.no_data)) | ~np.isfinite(a)
-    b_missing = (b == float(ds2.no_data)) | ~np.isfinite(b)
+    a_raw = np.asarray(ds1)
+    b_raw = np.asarray(ds2)
+    a_int = np.issubdtype(a_raw.dtype, np.integer)
+    b_int = np.issubdtype(b_raw.dtype, np.integer)
+    a_missing = (
+        (a_raw == int(ds1.no_data))
+        if a_int
+        else ((a_raw == float(ds1.no_data)) | ~np.isfinite(a_raw))
+    )
+    b_missing = (
+        (b_raw == int(ds2.no_data))
+        if b_int
+        else ((b_raw == float(ds2.no_data)) | ~np.isfinite(b_raw))
+    )
     validity_mismatch = int(np.sum(a_missing != b_missing))
     if validity_mismatch > 0:
         print(f"Validity mismatch cells: {validity_mismatch}")
     valid = ~a_missing & ~b_missing
-    diff = (a - b)[valid]
-    if diff.size == 0:
+    if not np.any(valid):
         max_diff = min_diff = avg_diff = rms_diff = 0.0
     else:
+        if a_int and b_int:
+            # Compute exact arbitrary-precision integer differences before aggregating
+            # so 64-bit integers above 2^53 do not lose precision in float64.
+            diff = np.array(
+                [
+                    int(x) - int(y)
+                    for x, y in zip(
+                        a_raw[valid].ravel(), b_raw[valid].ravel(), strict=True
+                    )
+                ],
+                dtype=np.float64,
+            )
+        else:
+            a = a_raw[valid].astype(np.float64)
+            b = b_raw[valid].astype(np.float64)
+            diff = np.where(a == b, 0.0, a - b)
         abs_diff = np.abs(diff)
         max_diff = float(np.max(abs_diff))
         min_diff = float(np.min(abs_diff))

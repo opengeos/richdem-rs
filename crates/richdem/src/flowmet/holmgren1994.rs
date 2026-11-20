@@ -33,8 +33,8 @@ pub fn fm_holmgren<T: DemNum>(elevations: &Array2D<T>, xparam: f64) -> Array3D<f
             }
 
             let e = elevations.get(x, y);
-            let mut weights = [0.0f64; 9];
-            let mut c_sum = 0.0f64;
+            let mut scaled = [0.0f64; 9];
+            let mut max_term = 0.0f64;
 
             for n in 1..=8 {
                 let nx = x as i32 + D8X[n];
@@ -45,20 +45,35 @@ pub fn fm_holmgren<T: DemNum>(elevations: &Array2D<T>, xparam: f64) -> Array3D<f
                 let ne = elevations.get_xy(nx, ny);
                 if ne.rd_cmp(e) == Ordering::Less {
                     let rise = e.to_f64() - ne.to_f64();
-                    let grad = rise / DR[n];
-                    let val = (grad * L[n]).powf(xparam);
-                    weights[n] = val;
-                    c_sum += val;
+                    let term = (rise / DR[n]) * L[n];
+                    if term > 0.0 && term.is_finite() {
+                        scaled[n] = term;
+                        if term > max_term {
+                            max_term = term;
+                        }
+                    }
                 }
             }
 
-            if c_sum > 0.0 {
-                props.set(x, y, 0, HAS_FLOW_GEN);
-                for (n, &wval) in weights.iter().enumerate().skip(1) {
-                    if wval > 0.0 {
-                        props.set(x, y, n, (wval / c_sum) as f32);
-                    } else {
-                        props.set(x, y, n, 0.0);
+            if max_term > 0.0 {
+                let mut weights = [0.0f64; 9];
+                let mut c_sum = 0.0f64;
+                for n in 1..=8 {
+                    if scaled[n] > 0.0 {
+                        // Rescale by max_term so large exponents cannot overflow to inf/inf = NaN.
+                        let val = (scaled[n] / max_term).powf(xparam);
+                        weights[n] = val;
+                        c_sum += val;
+                    }
+                }
+                if c_sum > 0.0 {
+                    props.set(x, y, 0, HAS_FLOW_GEN);
+                    for (n, &wval) in weights.iter().enumerate().skip(1) {
+                        if wval > 0.0 {
+                            props.set(x, y, n, (wval / c_sum) as f32);
+                        } else {
+                            props.set(x, y, n, 0.0);
+                        }
                     }
                 }
             }

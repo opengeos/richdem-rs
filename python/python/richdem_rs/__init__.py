@@ -166,7 +166,7 @@ def SaveGDAL(filename: str, rda: rdarray, compress: bool = False) -> None:
         np.float64,
     )
     if rda.dtype.type in supported_dtypes:
-        data = np.ascontiguousarray(rda)
+        data = np.ascontiguousarray(rda, dtype=rda.dtype.newbyteorder("="))
         nd = (
             int(rda.no_data)
             if np.issubdtype(rda.dtype, np.integer)
@@ -473,6 +473,20 @@ def convert_arc_flowdirs_to_richdem_d8(arc_flowdirs: rdarray) -> rdarray:
     )
 
 
+def convert_taudem_d8_to_richdem_d8(taudem_flowdirs: rdarray) -> rdarray:
+    """Converts TauDEM D8 flow directions to RichDEM D8 flow directions."""
+    arr = np.ascontiguousarray(taudem_flowdirs, dtype=np.uint8)
+    in_nd = (
+        int(taudem_flowdirs.no_data) if isinstance(taudem_flowdirs, rdarray) else 255
+    )
+    out, out_nd = _richdem_rs.convert_taudem_flowdirs_py(arr, in_nd)
+    return rdarray(
+        out,
+        meta_obj=taudem_flowdirs if isinstance(taudem_flowdirs, rdarray) else None,
+        no_data=int(out_nd),
+    )
+
+
 def rdShow(
     rda: rdarray,
     ignore_colours: Iterable[float] = (),
@@ -522,6 +536,7 @@ __all__ = (
     "TerrainAttribute",
     "__version__",
     "convert_arc_flowdirs_to_richdem_d8",
+    "convert_taudem_d8_to_richdem_d8",
     "depression_hierarchy",
     "fill_spill_merge",
     "flow_accumulation_from_d8",

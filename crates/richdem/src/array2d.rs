@@ -564,7 +564,6 @@ impl<T: DemNum> Array2D<T> {
     /// Converts all pixel values to another `DemNum` type, preserving geospatial metadata
     /// and the NoData mask without passing integer-to-integer conversions through `f64`.
     pub fn cast<U: DemNum>(&self) -> Array2D<U> {
-        let mut has_nodata = false;
         let mut converted_nd = if !T::IS_FLOAT && !U::IS_FLOAT {
             self.no_data.cast_to::<U>()
         } else {
@@ -577,7 +576,6 @@ impl<T: DemNum> Array2D<T> {
 
         for &v in &self.data {
             if v.rd_eq(self.no_data) {
-                has_nodata = true;
                 is_nd_mask.push(true);
                 data.push(converted_nd);
             } else {
@@ -590,23 +588,32 @@ impl<T: DemNum> Array2D<T> {
             }
         }
 
-        if has_nodata && nd_collides {
-            // Pick a target sentinel unused by any valid pixel so the NoData mask is preserved.
+        if nd_collides {
+            // Pick a target sentinel unused by any valid pixel so converted valid pixels
+            // are never misidentified as NoData (whether or not masked cells exist).
+            let is_unused = |cand: U| -> bool {
+                !data
+                    .iter()
+                    .zip(is_nd_mask.iter())
+                    .any(|(&val, &nd)| !nd && val.rd_eq(cand))
+            };
             let candidates: [U; 4] = [
                 U::MAX,
                 U::LOWEST,
                 U::esri_default_no_data(),
                 U::from_i64(-1),
             ];
-            let mut chosen = None;
-            for cand in candidates {
-                if !data
-                    .iter()
-                    .zip(is_nd_mask.iter())
-                    .any(|(&val, &nd)| !nd && val.rd_eq(cand))
-                {
-                    chosen = Some(cand);
-                    break;
+            let mut chosen = candidates.into_iter().find(|&c| is_unused(c));
+            if chosen.is_none() && !U::IS_FLOAT {
+                // Fallback scan for an unused integer value (covers full u8/i8 and small ranges).
+                let lo = U::LOWEST.to_i128();
+                let hi = U::MAX.to_i128().min(lo.saturating_add(65_535));
+                for probe in lo..=hi {
+                    let cand = U::from_i128_clamped(probe);
+                    if is_unused(cand) {
+                        chosen = Some(cand);
+                        break;
+                    }
                 }
             }
             if let Some(new_nd) = chosen {

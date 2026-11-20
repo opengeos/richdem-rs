@@ -212,13 +212,15 @@ pub fn lindsay2016<T: DemNum>(
     }
 
     let max_depth_f64 = max_depth.to_f64();
+    let max_depth_i128 = max_depth.to_i128();
 
     while let Some(c) = pq.pop() {
         if pits.get_xy(c.x, c.y) != 0 {
             let mut pathlen: u32 = 0;
             let pit_idx = dem.xy_to_i(c.x as usize, c.y as usize) as u32;
             let mut cc = pit_idx;
-            let mut pathdepth = f64::NEG_INFINITY;
+            let mut pathdepth_f64 = f64::NEG_INFINITY;
+            let mut pathdepth_i128 = i128::MIN;
             let mut target_height = dem.get_xy(c.x, c.y);
 
             if mode == LindsayMode::CompleteBreaching {
@@ -238,8 +240,13 @@ pub fn lindsay2016<T: DemNum>(
                     let ref_elev = orig_dem
                         .as_ref()
                         .map_or_else(|| dem.get_i(cc as usize), |o| o.get_i(cc as usize));
-                    let diff = ref_elev.to_f64() - target_height.to_f64();
-                    pathdepth = pathdepth.max(diff);
+                    if T::IS_FLOAT {
+                        let diff = ref_elev.to_f64() - target_height.to_f64();
+                        pathdepth_f64 = pathdepth_f64.max(diff);
+                    } else {
+                        let diff = ref_elev.to_i128() - target_height.to_i128();
+                        pathdepth_i128 = pathdepth_i128.max(diff);
+                    }
                     cc = backlinks.get_i(cc as usize);
                     if eps_gradients {
                         target_height = target_height.next_down_float().unwrap();
@@ -250,7 +257,13 @@ pub fn lindsay2016<T: DemNum>(
                 cc = pit_idx;
                 target_height = dem.get_xy(c.x, c.y);
 
-                if pathlen <= max_path_len && pathdepth <= max_depth_f64 {
+                let depth_ok = if T::IS_FLOAT {
+                    pathdepth_f64 <= max_depth_f64
+                } else {
+                    pathdepth_i128 <= max_depth_i128
+                };
+
+                if pathlen <= max_path_len && depth_ok {
                     while cc != NO_BACK_LINK
                         && dem.get_i(cc as usize).rd_cmp(target_height) != Ordering::Less
                     {
@@ -268,12 +281,22 @@ pub fn lindsay2016<T: DemNum>(
                         && dem.get_i(cc as usize).rd_cmp(target_height) != Ordering::Less
                     {
                         let orig_e = orig.get_i(cc as usize);
-                        let orig_f = orig_e.to_f64();
-                        let limit_f = target_height.to_f64() + max_depth_f64;
-                        let min_allowed = if orig_f > limit_f {
-                            T::from_f64(orig_f - max_depth_f64)
+                        let min_allowed = if T::IS_FLOAT {
+                            let orig_f = orig_e.to_f64();
+                            let limit_f = target_height.to_f64() + max_depth_f64;
+                            if orig_f > limit_f {
+                                T::from_f64(orig_f - max_depth_f64)
+                            } else {
+                                target_height
+                            }
                         } else {
-                            target_height
+                            let orig_i = orig_e.to_i128();
+                            let limit_i = target_height.to_i128() + max_depth_i128;
+                            if orig_i > limit_i {
+                                T::from_i128_clamped(orig_i - max_depth_i128)
+                            } else {
+                                target_height
+                            }
                         };
                         let new_e = dem.get_i(cc as usize).rd_min(min_allowed);
                         dem.set_i(cc as usize, new_e);

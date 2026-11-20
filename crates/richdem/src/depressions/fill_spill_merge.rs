@@ -86,7 +86,8 @@ pub fn backfill_depression<T: DemNum, W: DemNum>(
     }
 }
 
-/// Validates dimensions, flow directions, and depression labels before mutating state.
+/// Validates dimensions, hierarchy links, flow directions (including acyclicity),
+/// and depression labels before mutating state.
 fn validate_fsm_inputs<T: DemNum, W: DemNum>(
     topo: &Array2D<T>,
     label: &Array2D<DhLabel>,
@@ -97,6 +98,7 @@ fn validate_fsm_inputs<T: DemNum, W: DemNum>(
 ) -> Result<()> {
     let w = topo.width();
     let h = topo.height();
+    let ncells = topo.size();
     if label.width() != w
         || label.height() != h
         || flowdirs.width() != w
@@ -113,16 +115,86 @@ fn validate_fsm_inputs<T: DemNum, W: DemNum>(
             "DepressionHierarchy must contain at least the OCEAN entry".into(),
         ));
     }
+
+    // Validate all depression references and verify the hierarchy traversal from OCEAN is acyclic.
+    let num_deps = deps.len();
+    for (idx, d) in deps.iter().enumerate() {
+        let check_dep_ref = |field: &str, v: DhLabel| -> Result<()> {
+            if v != NO_VALUE && (v as usize) >= num_deps {
+                return Err(Error::InvalidArgument(format!(
+                    "depression {idx} has out-of-range {field}={v} (hierarchy len {num_deps})"
+                )));
+            }
+            Ok(())
+        };
+        check_dep_ref("parent", d.parent)?;
+        check_dep_ref("lchild", d.lchild)?;
+        check_dep_ref("rchild", d.rchild)?;
+        check_dep_ref("odep", d.odep)?;
+        check_dep_ref("geolink", d.geolink)?;
+        for &ol in &d.ocean_linked {
+            if (ol as usize) >= num_deps {
+                return Err(Error::InvalidArgument(format!(
+                    "depression {idx} has out-of-range ocean_linked entry {ol} (hierarchy len {num_deps})"
+                )));
+            }
+        }
+        if d.pit_cell != NO_VALUE && (d.pit_cell as usize) >= ncells {
+            return Err(Error::InvalidArgument(format!(
+                "depression {idx} has out-of-range pit_cell {}",
+                d.pit_cell
+            )));
+        }
+        if d.out_cell != NO_VALUE && (d.out_cell as usize) >= ncells {
+            return Err(Error::InvalidArgument(format!(
+                "depression {idx} has out-of-range out_cell {}",
+                d.out_cell
+            )));
+        }
+    }
+
+    // Check hierarchy traversal acyclicity from OCEAN (0 = unvisited, 1 = visiting, 2 = done).
+    fn check_dh_acyclic<T: DemNum>(
+        node: DhLabel,
+        deps: &DepressionHierarchy<T>,
+        state: &mut [u8],
+    ) -> Result<()> {
+        if node == NO_VALUE {
+            return Ok(());
+        }
+        let i = node as usize;
+        if state[i] == 1 {
+            return Err(Error::InvalidArgument(format!(
+                "cycle detected in DepressionHierarchy at depression {node}"
+            )));
+        }
+        if state[i] == 2 {
+            return Ok(());
+        }
+        state[i] = 1;
+        for &c in &deps[i].ocean_linked {
+            check_dh_acyclic(c, deps, state)?;
+        }
+        check_dh_acyclic(deps[i].lchild, deps, state)?;
+        check_dh_acyclic(deps[i].rchild, deps, state)?;
+        state[i] = 2;
+        Ok(())
+    }
+    let mut dh_state = vec![0u8; num_deps];
+    check_dh_acyclic(OCEAN, deps, &mut dh_state)?;
+
     let dx = topology.dx();
     let dy = topology.dy();
     let nmax = topology.nmax() as Flowdir;
+    let mut indeg = vec![0u8; ncells];
+    let mut downstream = vec![usize::MAX; ncells];
     for y in 0..h {
         for x in 0..w {
+            let ci = y * w + x;
             let lbl = label.get(x, y) as usize;
-            if lbl >= deps.len() {
+            if lbl >= num_deps {
                 return Err(Error::InvalidArgument(format!(
-                    "label {lbl} at ({x}, {y}) exceeds DepressionHierarchy length {}",
-                    deps.len()
+                    "label {lbl} at ({x}, {y}) exceeds DepressionHierarchy length {num_deps}"
                 )));
             }
             let dir = flowdirs.get(x, y);
@@ -141,8 +213,36 @@ fn validate_fsm_inputs<T: DemNum, W: DemNum>(
                     "flow direction {dir} at ({x}, {y}) points outside grid ({w}x{h})"
                 )));
             }
+            let ni = (ny as usize) * w + (nx as usize);
+            downstream[ci] = ni;
+            indeg[ni] += 1;
         }
     }
+
+    // Verify flowdirs is acyclic via Kahn's topological sort before mutating deps or wtd.
+    let mut q = VecDeque::new();
+    for (ci, &d) in indeg.iter().enumerate() {
+        if d == 0 {
+            q.push_back(ci);
+        }
+    }
+    let mut visited = 0usize;
+    while let Some(ci) = q.pop_front() {
+        visited += 1;
+        let ni = downstream[ci];
+        if ni != usize::MAX {
+            indeg[ni] -= 1;
+            if indeg[ni] == 0 {
+                q.push_back(ni);
+            }
+        }
+    }
+    if visited != ncells {
+        return Err(Error::InvalidArgument(
+            "flowdirs contains a cycle; cannot route water in fill_spill_merge".into(),
+        ));
+    }
+
     Ok(())
 }
 
@@ -217,18 +317,26 @@ fn move_water_into_pits_with_topology<T: DemNum, W: DemNum>(
 
         match downstream {
             None => {
-                let cw = wtd.get_i(ci).to_f64();
-                if cw > 0.0 {
-                    deps[label.get_i(ci) as usize].water_vol += cw;
-                    wtd.set_i(ci, W::ZERO);
+                if !wtd.is_no_data_i(ci) {
+                    let cw = wtd.get_i(ci).to_f64();
+                    if cw > 0.0 {
+                        deps[label.get_i(ci) as usize].water_vol += cw;
+                        wtd.set_i(ci, W::ZERO);
+                    }
                 }
             }
             Some(ni) => {
-                let cw = wtd.get_i(ci).to_f64();
-                if cw > 0.0 {
-                    let nw = wtd.get_i(ni).to_f64();
-                    wtd.set_i(ni, W::from_f64(nw + cw));
-                    wtd.set_i(ci, W::ZERO);
+                if !wtd.is_no_data_i(ci) {
+                    let cw = wtd.get_i(ci).to_f64();
+                    if cw > 0.0 {
+                        if wtd.is_no_data_i(ni) && label.get_i(ni) == OCEAN {
+                            deps[OCEAN as usize].water_vol += cw;
+                        } else {
+                            let nw = wtd.get_i(ni).to_f64();
+                            wtd.set_i(ni, W::from_f64(nw + cw));
+                        }
+                        wtd.set_i(ci, W::ZERO);
+                    }
                 }
                 let rem = dependencies.get_i(ni) - 1;
                 dependencies.set_i(ni, rem);

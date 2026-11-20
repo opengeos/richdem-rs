@@ -450,17 +450,19 @@ fn convert_arc_flowdirs_py<'py>(
 }
 
 #[pyfunction]
+#[pyo3(signature = (td, no_data=255))]
 fn convert_taudem_flowdirs_py<'py>(
     py: Python<'py>,
     td: PyReadonlyArray2<'_, u8>,
     no_data: u8,
-) -> PyResult<Bound<'py, PyArray2<u8>>> {
+) -> PyResult<(Bound<'py, PyArray2<u8>>, u8)> {
     let view = td.as_array();
     let (h, w) = (view.nrows(), view.ncols());
     let mut rd = Array2D::from_vec(w, h, view.iter().copied().collect()).map_err(to_py_err)?;
     rd.set_no_data(no_data);
     let out = convert_taudem_d8_to_richdem_d8(&rd).map_err(to_py_err)?;
-    to_py_array2(py, out)
+    let out_nd = out.no_data();
+    Ok((to_py_array2(py, out)?, out_nd))
 }
 
 #[pyfunction]

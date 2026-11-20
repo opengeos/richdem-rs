@@ -594,8 +594,7 @@ fn test_prng_and_perlin_same_seed_reproducibility() {
 }
 
 #[test]
-fn test_review_regression_edge_cases() {
-    // 1. NoData preservation in has_depressions, Barnes2014, Zhou2016, watersheds, hierarchy
+fn test_nodata_preservation_across_depression_algorithms() {
     let mut nd_dem = Array2D::from_rows(&[
         &[10.0f64, 10.0, 10.0],
         &[10.0, -9999.0, 10.0],
@@ -621,8 +620,11 @@ fn test_review_regression_edge_cases() {
     let ws = priority_flood_watersheds_barnes2014(&mut d4, true, Topology::D8);
     assert_eq!(d4.get(1, 1), -9999.0);
     assert_eq!(ws.get(1, 1), ws.no_data());
+}
 
-    // 2. Tarboton angular proportioning: closer neighbor gets larger share
+#[test]
+fn test_tarboton_and_dinf_flow_direction_edge_cases() {
+    // Tarboton angular proportioning: closer neighbor gets larger share
     let mut tb_dem = Array2D::from_rows(&[
         &[5.0f64, 20.0, 20.0],
         &[6.0, 10.0, 20.0],
@@ -633,7 +635,7 @@ fn test_review_regression_edge_cases() {
     let props = fm_tarboton(&tb_dem);
     assert!(props.get(1, 1, 1) > props.get(1, 1, 2)); // West > NW
 
-    // 3. D-infinity east (0.0) vs DINF_NO_FLOW (-2.0) + terminal cell local area
+    // D-infinity east (0.0) vs DINF_NO_FLOW (-2.0) + terminal cell local area
     let mut east_dem =
         Array2D::from_rows(&[&[3.0f64, 2.0, 1.0], &[3.0, 2.0, 1.0], &[3.0, 2.0, 1.0]]).unwrap();
     east_dem.set_no_data(-9999.0);
@@ -647,34 +649,52 @@ fn test_review_regression_edge_cases() {
     let single_area = dinf_upslope_area::<f32, f64>(&single);
     assert_eq!(single_area.get(0, 0), 1.0);
 
-    // 4. Rectangular-cell curvature uses both dx and dy
+    // D8 and Dinf skip NoData and NaN neighbors rather than routing into them
+    let mut nd_neighbor_dem = Array2D::from_rows(&[
+        &[10.0f64, 10.0, 10.0],
+        &[-9999.0, 10.0, 9.0],
+        &[10.0, f64::NAN, 10.0],
+    ])
+    .unwrap();
+    nd_neighbor_dem.set_no_data(-9999.0);
+    assert_eq!(d8_flow_directions(&nd_neighbor_dem).get(1, 1), 5); // East (only lower valid neighbor)
+    assert_eq!(dinf_flow_directions(&nd_neighbor_dem).get(1, 1), 0.0); // East (0 radians)
+}
+
+#[test]
+fn test_rectangular_cell_curvature_uses_dx_and_dy() {
     let mut rect =
         Array2D::from_rows(&[&[4.0f64, 4.0, 4.0], &[0.0, 0.0, 0.0], &[4.0, 4.0, 4.0]]).unwrap();
     rect.set_no_data(-9999.0);
     rect.geotransform = [0.0, 1.0, 0.0, 6.0, 0.0, -2.0];
     let curv = ta_curvature(&rect, 1.0);
     assert!((curv.get(1, 1) - (-200.0)).abs() < 1e-4);
+}
 
-    // 5. Steep Bresenham line in d8_upslope_cells includes both endpoints
+#[test]
+fn test_steep_bresenham_line_and_dsu_and_bucket_fill() {
+    // Steep Bresenham line in d8_upslope_cells includes both endpoints
     let fds = Array2D::new(4, 6, 0u8);
     let up = d8_upslope_cells(1, 1, 2, 5, &fds);
     assert_eq!(up.get(1, 1), 2);
     assert_eq!(up.get(2, 5), 2);
 
-    // 6. DisjointDenseIntSet::merge_a_into_b cannot create cycles
+    // DisjointDenseIntSet::merge_a_into_b cannot create cycles
     let mut dsu = DisjointDenseIntSet::with_size(2);
     dsu.merge_a_into_b(0, 1);
     dsu.merge_a_into_b(1, 0);
     assert!(dsu.same_set(0, 1));
 
-    // 7. bucket_fill traverses across cells already set to set_value
+    // bucket_fill traverses across cells already set to set_value
     let check = Array2D::from_rows(&[&[2u8, 2, 2]]).unwrap();
     let mut set = Array2D::from_rows(&[&[0u8, 4, 0]]).unwrap();
     let mut seeds = vec![0usize];
     bucket_fill(&check, &mut set, 2, 4, &mut seeds, Topology::D8).unwrap();
     assert_eq!(set.data(), &[4, 4, 4]);
+}
 
-    // 8. Exact u64/i64 values > 2^53 preserved across cast and GeoTIFF I/O
+#[test]
+fn test_u64_precision_and_cast_nodata_collision_avoidance() {
     let big_u64: u64 = 9_007_199_254_740_993;
     let mut u64_arr = Array2D::from_rows(&[&[big_u64, big_u64 + 2]]).unwrap();
     u64_arr.set_no_data(u64::MAX);
@@ -688,7 +708,18 @@ fn test_review_regression_edge_cases() {
     assert_eq!(u64_loaded.get(0, 0), big_u64);
     assert_eq!(u64_loaded.get(1, 0), big_u64 + 2);
 
-    // 9. Boundary cells with outgoing flow in generic flow_accumulation
+    // Casting a raster with no masked cells still avoids colliding with valid data
+    let mut src = Array2D::from_rows(&[&[0i32, 255]]).unwrap();
+    src.set_no_data(-1);
+    let cast_u8 = src.cast::<u8>();
+    assert_ne!(cast_u8.no_data(), 0);
+    assert_ne!(cast_u8.no_data(), 255);
+    assert!(!cast_u8.is_no_data(0, 0));
+    assert!(!cast_u8.is_no_data(1, 0));
+}
+
+#[test]
+fn test_flow_accumulation_boundary_and_non_finite_validation() {
     let mut bprops = Array3D::<f32>::new(3, 1, NO_FLOW_GEN);
     bprops.set_no_data(NO_DATA_GEN);
     bprops.set(2, 0, 0, HAS_FLOW_GEN);
@@ -699,14 +730,60 @@ fn test_review_regression_edge_cases() {
     flow_accumulation(&bprops, &mut baccum).unwrap();
     assert_eq!(baccum.data(), &[3.0, 2.0, 1.0]);
 
-    // 10. All-ocean 2x2 hierarchy succeeds
+    // Non-finite proportion fails cleanly before mutating accum
+    let mut bad_props = bprops.clone();
+    bad_props.set(2, 0, 1, f32::NAN);
+    let mut untouched = Array2D::new(3, 1, 1.0f64);
+    assert!(flow_accumulation(&bad_props, &mut untouched).is_err());
+    assert_eq!(untouched.data(), &[1.0, 1.0, 1.0]);
+}
+
+#[test]
+fn test_all_ocean_hierarchy_and_fsm_validation() {
     let ocean_dem = Array2D::new(2, 2, -1.0f64);
     let mut ocean_lbl = get_new_depression_hierarchy_labels(2, 2, None);
     let mut ocean_fds = Array2D::new(2, 2, 5i8);
     let ocean_dh =
         get_depression_hierarchy(&ocean_dem, &mut ocean_lbl, &mut ocean_fds, Topology::D8).unwrap();
     assert_eq!(ocean_dh.len(), 1);
+    assert_eq!(ocean_dh[OCEAN as usize].dep_vol, 0.0);
     assert!(ocean_fds.data().iter().all(|&d| d == NO_FLOW));
+
+    // Flow-direction cycle is rejected before mutating wtd
+    let dem = Array2D::new(3, 3, 1.0f64);
+    let labels = get_new_depression_hierarchy_labels(3, 3, None);
+    let mut cyclic_fds = Array2D::new(3, 3, NO_FLOW);
+    cyclic_fds.set(0, 1, 5); // flows East -> (1, 1)
+    cyclic_fds.set(1, 1, 1); // flows West -> (0, 1)
+    let mut deps = vec![Depression::default()];
+    let mut wtd = Array2D::new(3, 3, 2.0f64);
+    assert!(fill_spill_merge(&dem, &labels, &cyclic_fds, &mut deps, &mut wtd).is_err());
+    assert!(wtd.data().iter().all(|&v| v == 2.0));
+}
+
+#[test]
+fn test_garbrecht_resolves_drainable_plateau() {
+    // 5x5 walled basin with a flat interior at 5.0 draining through a single outlet at (4, 2) = 1.0
+    let mut dem = Array2D::new(5, 5, 10.0f64);
+    dem.set_no_data(-9999.0);
+    for y in 1..4 {
+        for x in 1..4 {
+            dem.set(x, y, 5.0);
+        }
+    }
+    dem.set(4, 2, 1.0);
+    let mut resolved = dem.clone();
+    let mut fds = d8_flow_directions(&resolved);
+    garbrecht_alg(&mut resolved, &mut fds, 0.001).unwrap();
+    // Interior plateau cells should slope monotonically toward the outlet at (3, 2) -> (4, 2)
+    assert!(resolved.get(1, 2) > resolved.get(2, 2));
+    assert!(resolved.get(2, 2) > resolved.get(3, 2));
+    assert_eq!(resolved.get(4, 2), 1.0);
+    for y in 1..4 {
+        for x in 1..4 {
+            assert_ne!(fds.get(x, y), NO_FLOW as u8);
+        }
+    }
 }
 
 #[test]

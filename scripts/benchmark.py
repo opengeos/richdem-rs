@@ -57,16 +57,23 @@ def compare_suite(size: int, iters: int = 3) -> None:
         if check_diff and out_cpp is not None and out_rs is not None:
             a = np.asarray(out_cpp, dtype=np.float64)
             b = np.asarray(out_rs, dtype=np.float64)
-            mask = (
-                np.isfinite(a)
-                & np.isfinite(b)
-                & (a != -9999)
-                & (b != -9999)
-                & (a != -1)
-                & (b != -1)
+            nd_a = getattr(out_cpp, "no_data", None)
+            nd_b = getattr(out_rs, "no_data", None)
+            a_missing = ~np.isfinite(a) | (
+                a == float(nd_a) if nd_a is not None else False
             )
-            max_diff = float(np.max(np.abs(a[mask] - b[mask]))) if np.any(mask) else 0.0
-            diff_str = f"{max_diff:.2e}"
+            b_missing = ~np.isfinite(b) | (
+                b == float(nd_b) if nd_b is not None else False
+            )
+            mismatch = int(np.sum(a_missing != b_missing))
+            valid = ~a_missing & ~b_missing
+            if mismatch > 0:
+                diff_str = f"mis={mismatch}"
+            elif np.any(valid):
+                max_diff = float(np.max(np.abs(a[valid] - b[valid])))
+                diff_str = f"{max_diff:.2e}"
+            else:
+                diff_str = "n/a"
         else:
             diff_str = "n/a"
         print(
