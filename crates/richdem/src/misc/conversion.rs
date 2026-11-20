@@ -72,13 +72,24 @@ pub fn convert_taudem_d8_to_richdem_d8<T: DemNum>(
             out.set_i(i, out_nd);
             continue;
         }
-        let v = taudem_flowdirs.get_i(i).to_i64();
-        if !(0..=8).contains(&v) {
-            return Err(Error::InvalidArgument(format!(
-                "Invalid TauDEM flow direction '{v}'"
-            )));
-        }
-        out.set_i(i, T::from_i64(TAUDEM_TO_RICHDEM[v as usize]));
+        let v_idx: usize = if T::IS_FLOAT {
+            let raw = taudem_flowdirs.get_i(i).to_f64();
+            if !raw.is_finite() || raw.fract() != 0.0 || !(0.0..=8.0).contains(&raw) {
+                return Err(Error::InvalidArgument(format!(
+                    "Invalid TauDEM flow direction '{raw}'"
+                )));
+            }
+            raw as usize
+        } else {
+            let v = taudem_flowdirs.get_i(i).to_i128();
+            if !(0..=8).contains(&v) {
+                return Err(Error::InvalidArgument(format!(
+                    "Invalid TauDEM flow direction '{v}'"
+                )));
+            }
+            v as usize
+        };
+        out.set_i(i, T::from_i64(TAUDEM_TO_RICHDEM[v_idx]));
     }
     Ok(out)
 }

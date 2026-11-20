@@ -96,6 +96,11 @@ impl<T: DemNum> Default for Array2D<T> {
 
 impl<T: DemNum> Array2D<T> {
     /// Creates a `width x height` raster filled with `fill`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `width * height` overflows `usize`. Use [`Array2D::from_vec`] for fallible
+    /// construction from untrusted dimensions.
     pub fn new(width: usize, height: usize, fill: T) -> Self {
         let count = width
             .checked_mul(height)
@@ -179,6 +184,10 @@ impl<T: DemNum> Array2D<T> {
     }
 
     /// Resizes the raster to `width x height`, filling with `fill`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `width * height` overflows `usize`.
     pub fn resize(&mut self, width: usize, height: usize, fill: T) {
         let count = width
             .checked_mul(height)

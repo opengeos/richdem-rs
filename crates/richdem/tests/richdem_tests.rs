@@ -569,6 +569,15 @@ fn test_flowdir_conversions() {
     let rd_collide = convert_taudem_d8_to_richdem_d8(&td_collide).unwrap();
     assert_eq!(rd_collide.no_data(), 255);
     assert_eq!(rd_collide.data(), &[255, 1]);
+
+    // Fractional or NaN float TauDEM flow directions are rejected rather than truncated
+    let mut td_frac = Array2D::from_rows(&[&[1.0f64, 0.5]]).unwrap();
+    td_frac.set_no_data(-9999.0);
+    assert!(convert_taudem_d8_to_richdem_d8(&td_frac).is_err());
+
+    let mut td_nan = Array2D::from_rows(&[&[1.0f64, f64::NAN]]).unwrap();
+    td_nan.set_no_data(-9999.0);
+    assert!(convert_taudem_d8_to_richdem_d8(&td_nan).is_err());
 }
 
 #[test]
