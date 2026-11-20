@@ -50,6 +50,18 @@ pub fn d8_flow_flats<U: DemNum>(
     let w = flat_mask.width();
     let h = flat_mask.height();
     assert_eq!(
+        labels.width(),
+        w,
+        "labels width ({}) must match flat_mask width ({w})",
+        labels.width()
+    );
+    assert_eq!(
+        labels.height(),
+        h,
+        "labels height ({}) must match flat_mask height ({h})",
+        labels.height()
+    );
+    assert_eq!(
         flowdirs.width(),
         w,
         "flowdirs width ({}) must match flat_mask width ({w})",
@@ -295,6 +307,13 @@ pub fn d8_flats_alter_dem<T: DemNum>(
     }
     let w = flat_mask.width();
     let h = flat_mask.height();
+    if labels.width() != w || labels.height() != h {
+        return Err(Error::DimensionMismatch(format!(
+            "labels ({}x{}) must match flat_mask ({w}x{h})",
+            labels.width(),
+            labels.height()
+        )));
+    }
     if elevations.width() != w || elevations.height() != h {
         return Err(Error::DimensionMismatch(format!(
             "elevations ({}x{}) must match flat_mask ({w}x{h})",

@@ -198,7 +198,7 @@ where
     let nd = output.no_data();
 
     for_each_row_mut(output.data_mut(), w, |y, row| {
-        for (x, dst) in row.iter_mut().enumerate().take(w) {
+        for (x, dst) in row.iter_mut().enumerate() {
             *dst = if elevations.is_no_data(x, y) {
                 nd
             } else {

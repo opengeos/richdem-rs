@@ -289,6 +289,18 @@ pub fn resolve_flats_flowdirs_barnes2014(
     let w = flat_mask.width();
     let h = flat_mask.height();
     assert_eq!(
+        labels.width(),
+        w,
+        "labels width ({}) must match flat_mask width ({w})",
+        labels.width()
+    );
+    assert_eq!(
+        labels.height(),
+        h,
+        "labels height ({}) must match flat_mask height ({h})",
+        labels.height()
+    );
+    assert_eq!(
         flowdirs.width(),
         w,
         "flowdirs width ({}) must match flat_mask width ({w})",

@@ -20,7 +20,7 @@ pub fn find_flats<T: DemNum>(elevations: &Array2D<T>) -> Array2D<i8> {
     flats.set_no_data(FLAT_NO_DATA);
 
     for_each_row_mut(flats.data_mut(), w, |y, row| {
-        for (x, dst) in row.iter_mut().enumerate().take(w) {
+        for (x, dst) in row.iter_mut().enumerate() {
             if elevations.is_no_data(x, y) {
                 *dst = FLAT_NO_DATA;
                 continue;
