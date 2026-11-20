@@ -30,7 +30,7 @@ rd.SaveGDAL("accum.tif", accum, compress=True)
 ### What Improves
 
 - **No GDAL or C++ toolchain needed:** `LoadGDAL` and `SaveGDAL` are backed by pure-Rust [`terrio`](https://terrio.dev) — `pip install richdem-rs` works cleanly on Python 3.11–3.14 without conda or system `libgdal`.
-- **Up to 3.5× faster** on key operations (`FillDepressions` 1.24–1.83×, `ResolveFlats` ~2.0×, `TerrainAttribute` 1.42–3.54×) with native `rayon` multithreading (note: single-threaded `BreachDepressions` at ~0.89–0.92× and D8 `FlowAccumulation` at ~0.86–0.91× are currently slightly slower than C++ `richdem2`; see [Benchmarks](benchmarks.md)).
+- **Up to 3.5× faster** on key operations (`FillDepressions` 1.24–1.83×, `ResolveFlats` ~2.0×, `TerrainAttribute` 1.42–3.54×) in single-threaded head-to-head runs (note: `BreachDepressions` at ~0.89–0.92× and D8 `FlowAccumulation` at ~0.86–0.91× are currently slightly slower than C++ `richdem2`; see [Benchmarks](benchmarks.md)). Multi-core scaling up to 22× is available via `rayon` (see [Multithreading](parallelism.md)).
 - **No OpenMP runtime quirks:** Multithreading uses Rust's `rayon` thread pool without `libgomp` / `libomp` linking issues across macOS, Linux, and Windows.
 
 ## CLI Command Mapping (`rd_*` → `richdem`)
