@@ -78,6 +78,10 @@ fn dinf_masked_flow_dir(
 }
 
 /// Resolves flat cells in a D-infinity flow direction raster using `flat_resolution_mask` and `groups`.
+///
+/// # Panics
+///
+/// Panics if `groups` or `flowdirs` does not have the same dimensions as `flat_resolution_mask`.
 pub fn dinf_flow_flats(
     flat_resolution_mask: &Array2D<i32>,
     groups: &Array2D<i32>,
@@ -85,29 +89,21 @@ pub fn dinf_flow_flats(
 ) {
     let w = flat_resolution_mask.width();
     let h = flat_resolution_mask.height();
-    assert_eq!(
+    super::assert_dims_match(
         groups.width(),
-        w,
-        "groups width ({}) must match flat_resolution_mask width ({w})",
-        groups.width()
-    );
-    assert_eq!(
         groups.height(),
-        h,
-        "groups height ({}) must match flat_resolution_mask height ({h})",
-        groups.height()
-    );
-    assert_eq!(
-        flowdirs.width(),
         w,
-        "flowdirs width ({}) must match flat_resolution_mask width ({w})",
-        flowdirs.width()
-    );
-    assert_eq!(
-        flowdirs.height(),
         h,
-        "flowdirs height ({}) must match flat_resolution_mask height ({h})",
-        flowdirs.height()
+        "groups",
+        "flat_resolution_mask",
+    );
+    super::assert_dims_match(
+        flowdirs.width(),
+        flowdirs.height(),
+        w,
+        h,
+        "flowdirs",
+        "flat_resolution_mask",
     );
     if w < 3 || h < 3 {
         return;

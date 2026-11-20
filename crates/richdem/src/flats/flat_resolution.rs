@@ -42,6 +42,10 @@ fn d8_masked_flow_dir(flat_mask: &Array2D<i32>, labels: &Array2D<i32>, x: usize,
 }
 
 /// Assigns D8 flow directions within flat regions using `flat_mask` and `labels`.
+///
+/// # Panics
+///
+/// Panics if `labels` or `flowdirs` does not have the same dimensions as `flat_mask`.
 pub fn d8_flow_flats<U: DemNum>(
     flat_mask: &Array2D<i32>,
     labels: &Array2D<i32>,
@@ -49,29 +53,14 @@ pub fn d8_flow_flats<U: DemNum>(
 ) {
     let w = flat_mask.width();
     let h = flat_mask.height();
-    assert_eq!(
-        labels.width(),
-        w,
-        "labels width ({}) must match flat_mask width ({w})",
-        labels.width()
-    );
-    assert_eq!(
-        labels.height(),
-        h,
-        "labels height ({}) must match flat_mask height ({h})",
-        labels.height()
-    );
-    assert_eq!(
+    super::assert_dims_match(labels.width(), labels.height(), w, h, "labels", "flat_mask");
+    super::assert_dims_match(
         flowdirs.width(),
-        w,
-        "flowdirs width ({}) must match flat_mask width ({w})",
-        flowdirs.width()
-    );
-    assert_eq!(
         flowdirs.height(),
+        w,
         h,
-        "flowdirs height ({}) must match flat_mask height ({h})",
-        flowdirs.height()
+        "flowdirs",
+        "flat_mask",
     );
     if w < 3 || h < 3 {
         return;

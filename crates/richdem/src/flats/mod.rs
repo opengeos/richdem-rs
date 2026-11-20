@@ -26,3 +26,18 @@ pub fn resolve_flats_epsilon<T: DemNum>(elevations: &mut Array2D<T>) -> Result<u
     let (flat_mask, labels) = get_flat_mask(elevations);
     resolve_flats_epsilon_barnes2014(&flat_mask, &labels, elevations)
 }
+
+pub(crate) fn assert_dims_match(
+    actual_w: usize,
+    actual_h: usize,
+    expected_w: usize,
+    expected_h: usize,
+    actual_name: &str,
+    expected_name: &str,
+) {
+    assert_eq!(
+        (actual_w, actual_h),
+        (expected_w, expected_h),
+        "{actual_name} ({actual_w}x{actual_h}) must match {expected_name} ({expected_w}x{expected_h})"
+    );
+}
