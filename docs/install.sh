@@ -31,7 +31,11 @@ has() {
 # download URL FILE: FILE "-" writes to standard output.
 download() {
     if has curl; then
-        curl --proto-redir '=https' --tlsv1.2 -fsSL "$1" -o "$2"
+        if [ "$2" = "-" ]; then
+            curl --proto-redir '=https' --tlsv1.2 -fsSL "$1"
+        else
+            curl --proto-redir '=https' --tlsv1.2 -fsSL "$1" -o "$2"
+        fi
     elif has wget; then
         wget -q "$1" -O "$2"
     else
@@ -132,12 +136,15 @@ main() {
 
     tar -xzf "$tmp/$name.tar.gz" -C "$tmp"
     mkdir -p "$install_dir"
-    cp "$tmp/$name/richdem" "$install_dir/richdem.tmp"
-    chmod 755 "$install_dir/richdem.tmp"
-    mv -f "$install_dir/richdem.tmp" "$install_dir/richdem"
-
-    "$install_dir/richdem" --version > /dev/null || err "the installed $install_dir/richdem does not run"
-    say "installed $("$install_dir/richdem" --version) in $install_dir"
+    stage="$install_dir/richdem.tmp"
+    cp "$tmp/$name/richdem" "$stage"
+    chmod 755 "$stage"
+    if ! installed_version=$("$stage" --version 2> /dev/null); then
+        rm -f "$stage"
+        err "the downloaded richdem binary does not run"
+    fi
+    mv -f "$stage" "$install_dir/richdem"
+    say "installed $installed_version in $install_dir"
 
     case ":$PATH:" in
         *":$install_dir:"*) ;;

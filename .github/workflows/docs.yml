@@ -34,6 +34,44 @@ jobs:
           test -f site/CNAME
           test -f site/install.sh
           test -f site/install.ps1
+      - name: Lint and smoke-test installer scripts
+        run: |
+          sh -n docs/install.sh
+          shellcheck docs/install.sh
+          pwsh -NoProfile -Command '
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile("docs/install.ps1", [ref]$null, [ref]$errors)
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error $_.ToString() }
+              exit 1
+            }
+          '
+          # Smoke-test install.sh against a local file:// mirror (happy path + broken-binary preservation)
+          tmp=$(mktemp -d)
+          trap 'rm -rf "$tmp"' EXIT
+          arch=$(uname -m)
+          target="${arch}-unknown-linux-musl"
+          name="richdem-cli-v0.0.1-${target}"
+          mkdir -p "$tmp/mirror/$name" "$tmp/bin"
+          printf '#!/bin/sh\necho "richdem 0.0.1"\n' > "$tmp/mirror/$name/richdem"
+          chmod 755 "$tmp/mirror/$name/richdem"
+          tar -czf "$tmp/mirror/$name.tar.gz" -C "$tmp/mirror" "$name"
+          sha256sum "$tmp/mirror/$name.tar.gz" > "$tmp/mirror/$name.tar.gz.sha256"
+          RICHDEM_VERSION="0.0.1" RICHDEM_INSTALL_DIR="$tmp/bin" RICHDEM_DOWNLOAD_URL="file://$tmp/mirror" sh docs/install.sh
+          test "$("$tmp/bin/richdem" --version)" = "richdem 0.0.1"
+          # Broken binary must fail without overwriting the existing working binary
+          name_bad="richdem-cli-v0.0.2-${target}"
+          mkdir -p "$tmp/mirror/$name_bad"
+          printf '#!/bin/sh\nexit 1\n' > "$tmp/mirror/$name_bad/richdem"
+          chmod 755 "$tmp/mirror/$name_bad/richdem"
+          tar -czf "$tmp/mirror/$name_bad.tar.gz" -C "$tmp/mirror" "$name_bad"
+          sha256sum "$tmp/mirror/$name_bad.tar.gz" > "$tmp/mirror/$name_bad.tar.gz.sha256"
+          if RICHDEM_VERSION="0.0.2" RICHDEM_INSTALL_DIR="$tmp/bin" RICHDEM_DOWNLOAD_URL="file://$tmp/mirror" sh docs/install.sh; then
+            echo "expected broken binary install to fail" >&2
+            exit 1
+          fi
+          test "$("$tmp/bin/richdem" --version)" = "richdem 0.0.1"
+          test ! -e "$tmp/bin/richdem.tmp"
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         with:

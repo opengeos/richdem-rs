@@ -85,12 +85,25 @@ function Install-Richdem {
         Expand-Archive $zip -DestinationPath $tmp
         New-Item -ItemType Directory -Path $installDir -Force | Out-Null
         $dst = Join-Path $installDir "richdem.exe"
-        $stage = Join-Path $installDir "richdem.exe.tmp"
+        $stage = Join-Path $installDir "richdem.tmp.exe"
         $old = Join-Path $installDir "richdem.exe.old"
         Copy-Item (Join-Path $tmp "$name\richdem.exe") $stage -Force
+        try {
+            & $stage --version | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "exit code $LASTEXITCODE" }
+        } catch {
+            Remove-Item $stage -Force -ErrorAction SilentlyContinue
+            throw "The downloaded richdem.exe does not run ($($_.Exception.Message))"
+        }
         if (Test-Path $old) { Remove-Item $old -Force -ErrorAction SilentlyContinue }
         if (Test-Path $dst) { Move-Item $dst $old -Force }
-        Move-Item $stage $dst -Force
+        try {
+            Move-Item $stage $dst -Force
+        } catch {
+            Remove-Item $stage -Force -ErrorAction SilentlyContinue
+            if (Test-Path $old) { Move-Item $old $dst -Force -ErrorAction SilentlyContinue }
+            throw
+        }
         if (Test-Path $old) { Remove-Item $old -Force -ErrorAction SilentlyContinue }
         Write-Host "richdem-installer: installed $dst"
     } finally {
