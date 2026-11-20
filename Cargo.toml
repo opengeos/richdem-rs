@@ -1,0 +1,23 @@
+[workspace]
+resolver = "3"
+members = ["crates/richdem", "crates/richdem-cli"]
+exclude = ["python"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-only"
+rust-version = "1.90"
+repository = "https://github.com/opengeos/richdem-rs"
+authors = ["Richard Barnes <rbarnes@umn.edu>", "Qiusheng Wu <giswqs@gmail.com>"]
+
+[workspace.dependencies]
+richdem = { path = "crates/richdem", version = "0.1.0" }
+terrio = { version = "0.9", default-features = false, features = ["geotiff"] }
+rayon = "1.10"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clap = { version = "4", features = ["derive"] }
+rand = "0.8"
+tempfile = "3"

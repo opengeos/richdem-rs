@@ -1,0 +1,32 @@
+[package]
+name = "richdem"
+description = "High-performance DEM hydrologic and terrain analysis in pure Rust (port of Richard Barnes's RichDEM), using terrio for GDAL-free raster I/O"
+readme = "../../README.md"
+keywords = ["gis", "dem", "hydrology", "terrain", "geomorphology"]
+categories = ["science::geo", "algorithms"]
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[features]
+default = ["terrio", "parallel"]
+## Pure-Rust geospatial raster I/O via `terrio` (GeoTIFF, COG, AAIGrid, ENVI, HFA, VRT, etc.)
+terrio = ["dep:terrio"]
+## Multi-threaded parallelism via `rayon`
+parallel = ["dep:rayon"]
+## Serialization of Array2D and DepressionHierarchy via `serde`
+serde = ["dep:serde"]
+
+[dependencies]
+thiserror.workspace = true
+rand.workspace = true
+terrio = { workspace = true, optional = true }
+rayon = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+
+[dev-dependencies]
+serde_json.workspace = true
+tempfile.workspace = true
