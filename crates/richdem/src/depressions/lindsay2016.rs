@@ -40,58 +40,69 @@ pub fn complete_breaching_lindsay2016<T: DemNum>(dem: &mut Array2D<T>, topo: Top
     let dy = topo.dy();
     let nmax = topo.nmax();
 
-    let mut backlinks = Array2D::<u32>::new(w, h, NO_BACK_LINK);
-    let mut visited = Array2D::<u8>::new(w, h, UNVISITED);
-    let mut pits = Array2D::<u8>::new(w, h, 0);
+    let mut backlinks = vec![NO_BACK_LINK; w * h];
+    let mut visited = vec![UNVISITED; w * h];
+    let mut pits = vec![0u8; w * h];
     let mut pq = GridCellZkLowPq::<T>::new();
     let mut total_pits: u32 = 0;
 
+    let nd = dem.no_data();
+    let dem_data = dem.data_mut();
+
     for y in 0..h {
+        let row_base = y * w;
+        let is_y_edge = y == 0 || y + 1 == h;
         for x in 0..w {
-            if dem.is_no_data(x, y) {
+            let ci = row_base + x;
+            let ce = dem_data[ci];
+            if ce.rd_eq(nd) {
                 continue;
             }
-            if dem.is_edge_cell(x, y) {
-                pq.emplace(x as i32, y as i32, dem.get(x, y));
-                visited.set(x, y, EDGE);
+            if is_y_edge || x == 0 || x + 1 == w {
+                pq.emplace(x as i32, y as i32, ce);
+                visited[ci] = EDGE;
                 continue;
             }
 
             let mut lowest_neighbour = T::MAX;
             let mut borders_nodata = false;
             for n in 1..=nmax {
-                let nx = x as i32 + dx[n];
-                let ny = y as i32 + dy[n];
-                if dem.is_no_data_xy(nx, ny) {
-                    pq.emplace(x as i32, y as i32, dem.get(x, y));
-                    visited.set(x, y, EDGE);
+                let nx = (x as i32 + dx[n]) as usize;
+                let ny = (y as i32 + dy[n]) as usize;
+                let ne = dem_data[ny * w + nx];
+                if ne.rd_eq(nd) {
+                    pq.emplace(x as i32, y as i32, ce);
+                    visited[ci] = EDGE;
                     borders_nodata = true;
                     break;
                 }
-                lowest_neighbour = lowest_neighbour.rd_min(dem.get_xy(nx, ny));
+                lowest_neighbour = lowest_neighbour.rd_min(ne);
             }
             if borders_nodata {
                 continue;
             }
 
-            if dem.get(x, y).rd_cmp(lowest_neighbour) != Ordering::Greater {
-                dem.set(x, y, lowest_neighbour);
-                pits.set(x, y, 1);
+            if ce.rd_cmp(lowest_neighbour) != Ordering::Greater {
+                dem_data[ci] = lowest_neighbour;
+                pits[ci] = 1;
                 total_pits += 1;
             }
         }
     }
 
+    let wi32 = w as i32;
+    let hi32 = h as i32;
     while let Some(c) = pq.pop() {
-        if pits.get_xy(c.x, c.y) != 0 {
-            let mut cc = dem.xy_to_i(c.x as usize, c.y as usize) as u32;
-            let target_height = dem.get_xy(c.x, c.y);
+        let ci_usize = (c.y as usize) * w + (c.x as usize);
+        if pits[ci_usize] != 0 {
+            let mut cc = ci_usize as u32;
+            let target_height = dem_data[ci_usize];
 
             while cc != NO_BACK_LINK
-                && dem.get_i(cc as usize).rd_cmp(target_height) != Ordering::Less
+                && dem_data[cc as usize].rd_cmp(target_height) != Ordering::Less
             {
-                dem.set_i(cc as usize, target_height);
-                cc = backlinks.get_i(cc as usize);
+                dem_data[cc as usize] = target_height;
+                cc = backlinks[cc as usize];
             }
 
             total_pits -= 1;
@@ -100,20 +111,24 @@ pub fn complete_breaching_lindsay2016<T: DemNum>(dem: &mut Array2D<T>, topo: Top
             }
         }
 
-        let ci = dem.xy_to_i(c.x as usize, c.y as usize) as u32;
+        let ci = ci_usize as u32;
         for n in 1..=nmax {
             let nx = c.x + dx[n];
             let ny = c.y + dy[n];
-            if !dem.in_grid(nx, ny)
-                || dem.is_no_data_xy(nx, ny)
-                || visited.get_xy(nx, ny) != UNVISITED
-            {
+            if nx < 0 || ny < 0 || nx >= wi32 || ny >= hi32 {
                 continue;
             }
-            let my_e = dem.get_xy(nx, ny);
+            let ni = (ny as usize) * w + (nx as usize);
+            if visited[ni] != UNVISITED {
+                continue;
+            }
+            let my_e = dem_data[ni];
+            if my_e.rd_eq(nd) {
+                continue;
+            }
             pq.emplace(nx, ny, my_e);
-            visited.set_xy(nx, ny, VISITED);
-            backlinks.set_xy(nx, ny, ci);
+            visited[ni] = VISITED;
+            backlinks[ni] = ci;
         }
     }
 }
