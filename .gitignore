@@ -1,6 +1,9 @@
 /target
 **/target
 Cargo.lock
+!js/Cargo.lock
+js/pkg/
+js/pkg-node/
 **/*.rs.bk
 *.pdb
 .DS_Store

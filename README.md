@@ -3,7 +3,7 @@
 [![CI](https://github.com/opengeos/richdem-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/opengeos/richdem-rs/actions/workflows/ci.yml)
 [![Docs](https://img.shields.io/badge/docs-richdem--rs.opengeos.org-teal.svg)](https://richdem-rs.opengeos.org)
 [![crates.io](https://img.shields.io/crates/v/richdem.svg)](https://crates.io/crates/richdem)
-[![PyPI](https://img.shields.io/pypi/v/richdem-rs.svg)](https://pypi.org/project/richdem-rs/)
+[![PyPI](https://img.shields.io/pypi/v/richdem-rs)](https://pypi.org/project/richdem-rs/)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/opengeos/richdem-rs/blob/main/examples/richdem_rs_demo.ipynb)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
@@ -25,7 +25,7 @@ High-performance Digital Elevation Model (DEM) hydrologic and terrain analysis i
   - **Flow metrics & accumulation:** D8 / D4 (O'Callaghan & Mark 1984), Rho8 / Rho4 (Fairfield & Leymarie 1991), D-infinity (Tarboton 1997), Quinn (1991), Holmgren (1994), Freeman (1991), generic 3D flow-proportion accumulation, direct D8 & D-infinity accumulation, and ArcGIS / TauDEM D8 conversions.
   - **Terrain attributes:** Slope (rise/run, percentage, degrees, radians) and aspect (Horn 1981), total / planform / profile curvature (Zevenbergen & Thorne 1987), SPI, CTI, topographic surface area (Jenness 2004), and perimeter.
 - **Zero C/C++ or GDAL dependencies:** Built on [`terrio`](https://github.com/opengeos/terrio) for pure-Rust reading and writing of GeoTIFF, Cloud Optimized GeoTIFF (COG), ESRI ASCII Grid, ENVI, HFA, VRT, and more — preserving geotransforms, CRS/projections, NoData values, and `PROCESSING_HISTORY` metadata.
-- **Rust library, CLI (`richdem`), and Python bindings (`richdem-rs` via PyO3 + maturin).**
+- **Rust library, CLI (`richdem`), Python bindings (`richdem-rs` via PyO3 + maturin), and WebAssembly (`richdem-js` via `wasm-bindgen`) with a live browser [Playground](https://richdem-rs.opengeos.org/playground/).**
 
 ## Workspace Layout
 
@@ -34,6 +34,7 @@ High-performance Digital Elevation Model (DEM) hydrologic and terrain analysis i
 | `crates/richdem` | Pure-Rust core library (`richdem`) |
 | `crates/richdem-cli` | Standalone CLI (`richdem`) covering RichDEM's `rd_*` tools |
 | `python` | Python bindings (`richdem-rs`, PyO3 + NumPy) with drop-in `pyRichDEM` API |
+| `js` | WebAssembly (`wasm-bindgen`) bindings (`richdem-js`) for browsers and Node.js |
 | `test_data` | Golden test fixtures from RichDEM (`depressions`, `breaching`, `flow_accum`) |
 
 ## Rust Usage

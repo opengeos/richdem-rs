@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/opengeos/richdem-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/opengeos/richdem-rs/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/richdem.svg)](https://crates.io/crates/richdem)
-[![PyPI](https://img.shields.io/pypi/v/richdem-rs.svg)](https://pypi.org/project/richdem-rs/)
+[![PyPI](https://img.shields.io/pypi/v/richdem-rs)](https://pypi.org/project/richdem-rs/)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/opengeos/richdem-rs/blob/main/examples/richdem_rs_demo.ipynb)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://github.com/opengeos/richdem-rs/blob/main/LICENSE)
 
@@ -69,15 +69,16 @@
   - **Terrain attributes:** Slope (rise/run, percentage, degrees, radians) and aspect (Horn 1981), total / planform / profile curvature (Zevenbergen & Thorne 1987), SPI, CTI, topographic surface area (Jenness 2004), and perimeter. See [Terrain Attributes](terrain-attributes.md).
 - **Zero C/C++ or GDAL dependencies:** Built on [`terrio`](https://terrio.dev) for pure-Rust GeoTIFF, COG, AAIGrid, ENVI, HFA, and VRT reading and writing — preserving geotransforms, CRS/projections, NoData values, and `PROCESSING_HISTORY` metadata.
 - **Native multi-core scaling:** Pure-Rust `rayon` parallelism enabled by default (no OpenMP or C runtime required). See [Multithreading](parallelism.md).
-- **Interactive Colab demo:** Try `richdem-rs` in your browser with no local setup via the [Google Colab notebook](https://colab.research.google.com/github/opengeos/richdem-rs/blob/main/examples/richdem_rs_demo.ipynb).
+- **Interactive browser demos:** Try `richdem-rs` directly in your browser with zero setup via the live [WebAssembly Playground](playground.md) or the [Google Colab notebook](https://colab.research.google.com/github/opengeos/richdem-rs/blob/main/examples/richdem_rs_demo.ipynb).
 
 ## Where to Go Next
 
 | You want to | Read |
 |---|---|
+| Try `richdem-rs` live in your browser | [Playground](playground.md) |
 | Install the Python package, Rust crate, or CLI | [Installation](installation.md) |
 | Run your first hydrologic workflow | [Getting Started](getting-started.md) |
 | Migrate existing `richdem` / `richdem2` scripts | [Coming from RichDEM](coming-from-richdem.md) |
-| Look up a Python, Rust, or CLI API | [Python](python.md), [Rust Library](rust.md), [Command Line](cli.md) |
+| Look up a Python, Rust, CLI, or JavaScript/WASM API | [Python](python.md), [Rust Library](rust.md), [Command Line](cli.md), [JavaScript / WASM](javascript.md) |
 | Compare performance and multi-core scaling | [Benchmarks](benchmarks.md), [Multithreading](parallelism.md) |
 | Cite RichDEM and algorithm papers | [Publications & Credits](credits.md) |

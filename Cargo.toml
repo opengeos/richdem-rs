@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/richdem", "crates/richdem-cli"]
-exclude = ["python"]
+exclude = ["python", "js"]
 
 [workspace.package]
 version = "0.2.0"

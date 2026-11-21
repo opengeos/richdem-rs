@@ -1,0 +1,80 @@
+NOTICE & CREDITS
+================
+
+richdem-rs is a Rust reimplementation of RichDEM (https://github.com/r-barnes/richdem),
+originally designed, authored, and published by Richard Barnes (rbarnes@umn.edu).
+
+All credit for the original library architecture, algorithm implementations,
+data structures, and test fixtures goes to Richard Barnes and the original
+algorithm authors listed below.
+
+Upstream Project
+----------------
+- RichDEM: Terrain Analysis Software
+  Author: Richard Barnes (https://github.com/r-barnes/richdem)
+  License: GNU General Public License v3.0 (GPL-3.0-only)
+  Maintained Python fork reference: https://github.com/giswqs/richdem2
+
+Geospatial I/O Dependency
+-------------------------
+- terrio: Pure-Rust geospatial raster, vector and point cloud data I/O
+  Repository: https://github.com/opengeos/terrio
+  License: MIT / MPL-2.0 / Apache-2.0
+
+Original Algorithm Publications & Authors
+-----------------------------------------
+- Barnes, R., Lehman, C., Mulla, D., 2014a. An efficient assignment of drainage
+  direction over flat surfaces in raster digital elevation models. Computers &
+  Geosciences 62, 128-135. doi:10.1016/j.cageo.2013.01.009
+- Barnes, R., Lehman, C., Mulla, D., 2014b. Priority-flood: An optimal
+  depression-filling and watershed-labeling algorithm for digital elevation
+  models. Computers & Geosciences 62, 117-127. doi:10.1016/j.cageo.2013.04.024
+- Barnes, R., 2016. Parallel priority-flood depression filling for trillion cell
+  digital elevation models on desktops or clusters. Computers & Geosciences 96,
+  56-68. doi:10.1016/j.cageo.2016.07.001
+- Barnes, R., 2017. Parallel non-divergent flow accumulation for trillion cell
+  digital elevation models on desktops or clusters. Environmental Modelling &
+  Software 92, 202-212. doi:10.1016/j.envsoft.2017.02.022
+- Barnes, R., Callaghan, K.L., Wickert, A.D., 2020. Computing water flow through
+  complex landscapes - Part 2: Finding hierarchies in depressions and
+  morphological segmentations. Earth Surface Dynamics 8, 431-445.
+  doi:10.5194/esurf-8-431-2020
+- Barnes, R., Callaghan, K.L., Wickert, A.D., 2021. Computing water flow through
+  complex landscapes - Part 3: Fill-Spill-Merge: Flow routing in depression
+  hierarchies. Earth Surface Dynamics 9, 105-121. doi:10.5194/esurf-9-105-2021
+- Fairfield, J., Leymarie, P., 1991. Drainage networks from grid digital
+  elevation models. Water Resources Research 27, 709-717.
+- Freeman, T.G., 1991. Calculating catchment area with divergent flow based on a
+  regular grid. Computers & Geosciences 17, 413-422.
+- Garbrecht, J., Martz, L.W., 1997. The assignment of drainage direction over
+  flat surfaces in raster digital elevation models. Journal of Hydrology 193,
+  204-213.
+- Holmgren, P., 1994. Multiple flow direction algorithms for runoff modelling in
+  grid based elevation models: an empirical evaluation. Hydrological Processes
+  8, 327-334.
+- Horn, B.K.P., 1981. Hill shading and the reflectance map. Proceedings of the
+  IEEE 69, 14-47. doi:10.1109/PROC.1981.11918
+- Jenness, J.S., 2004. Calculating landscape surface area from digital elevation
+  models. Wildlife Society Bulletin 32, 829-839.
+- Lindsay, J.B., 2016. Efficient hybrid breaching-filling sink removal methods
+  for flow path enforcement in digital elevation models. Hydrological Processes
+  30, 846-857. doi:10.1002/hyp.10648
+- O'Callaghan, J.F., Mark, D.M., 1984. The extraction of drainage networks from
+  digital elevation data. Computer Vision, Graphics, and Image Processing 28,
+  323-344.
+- Perlin, K., 2002. Improving Noise. ACM Transactions on Graphics 21(3),
+  681-682.
+- Quinn, P., Beven, K., Chevallier, P., Planchon, O., 1991. The prediction of
+  hillslope flow paths for distributed hydrological modelling using digital
+  terrain models. Hydrological Processes 5, 59-79.
+- Tarboton, D.G., 1997. A new method for the determination of flow directions
+  and upslope areas in grid digital elevation models. Water Resources Research
+  33, 309-319.
+- Wei, H., Zhou, G., Fu, S., 2018. Efficient Priority-Flood depression filling in
+  raster digital elevation models. International Journal of Digital Earth 12,
+  415-427. doi:10.1080/17538947.2018.1429503
+- Zevenbergen, L.W., Thorne, C.R., 1987. Quantitative analysis of land surface
+  topography. Earth Surface Processes and Landforms 12, 47-56.
+- Zhou, G., Sun, Z., Fu, S., 2016. An efficient variant of the Priority-Flood
+  algorithm for filling depressions in raster digital elevation models.
+  Computers & Geosciences 90, Part A, 87-96. doi:10.1016/j.cageo.2016.02.021

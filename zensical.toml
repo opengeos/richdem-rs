@@ -5,6 +5,8 @@ site_author = "opengeos"
 site_url = "https://richdem-rs.opengeos.org"
 repo_url = "https://github.com/opengeos/richdem-rs"
 repo_name = "opengeos/richdem-rs"
+extra_css = ["stylesheets/playground.css"]
+extra_javascript = ["javascripts/playground.js"]
 copyright = "richdem-rs is released under the GNU General Public License v3.0 (GPL-3.0-only). Ported from <a href=\"https://github.com/r-barnes/richdem\">RichDEM</a> by Richard Barnes; see <a href=\"https://github.com/opengeos/richdem-rs/blob/main/NOTICE\">NOTICE</a>."
 
 nav = [
@@ -12,6 +14,7 @@ nav = [
   { "Get Started" = [
     { "Installation" = "installation.md" },
     { "Getting Started" = "getting-started.md" },
+    { "Playground" = "playground.md" },
     { "Coming from RichDEM" = "coming-from-richdem.md" },
   ] },
   { "Algorithms" = [
@@ -24,6 +27,7 @@ nav = [
     { "Python" = "python.md" },
     { "Rust Library" = "rust.md" },
     { "Command Line" = "cli.md" },
+    { "JavaScript / WASM" = "javascript.md" },
   ] },
   { "Quality" = [
     { "Benchmarks" = "benchmarks.md" },
