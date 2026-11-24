@@ -1,0 +1,33 @@
+# cargo audit's settings for this repository, read from the repository root by `cargo audit`.
+# Vulnerabilities fail it; unmaintained, unsound and notice advisories are listed as warnings and
+# do not (nothing is denied in [output]).
+#
+# Every ignored advisory below reaches richdem-rs only through terrio, which depends
+# unconditionally on wbraster 0.2.1. wbraster's latest release requires zip 8.6.0 and ruzstd 0.8.3,
+# and no compatible release fixes them, so neither this workspace nor its lockfile can upgrade
+# them. terrio ignores the same IDs in its own .cargo/audit.toml for the same reasons. Remove these
+# when a terrio release drops wbraster or a wbraster release depends on zip >= 9 and
+# ruzstd >= 0.9.1.
+#
+# The heapless 0.8.0 "unsound" warnings (via terrio -> geo 0.33 -> rstar 0.12) are warnings only
+# and are left visible; they clear when geo moves to rstar >= 0.13.
+
+[advisories]
+ignore = [
+    # zip 8.6.0: `ZipArchive::extract` and `ZipStreamReader::extract`, which neither richdem,
+    # terrio nor wbraster calls. richdem-rs never opens zip archives.
+    "RUSTSEC-2026-0367",
+    "RUSTSEC-2026-0368",
+    "RUSTSEC-2026-0369",
+    "RUSTSEC-2026-0429",
+    "RUSTSEC-2026-0546",
+    "RUSTSEC-2026-0548",
+    # zip 8.6.0: WinZip AES entries (`aes-crypto`) and the Shrink, Reduce and Implode decoders
+    # (`legacy-zip`). wbraster enables only `deflate`, so neither is compiled in.
+    "RUSTSEC-2026-0545",
+    "RUSTSEC-2026-0547",
+    # ruzstd 0.8.3: wbraster's Zarr reader, which terrio reaches only with
+    # TERRIO_WBRASTER_FALLBACK=YES in builds without its `zarr` feature. richdem-rs reads GeoTIFF
+    # through terrio's own driver, which decodes Zstandard without ruzstd 0.8.
+    "RUSTSEC-2026-0344",
+]
