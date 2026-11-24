@@ -5,29 +5,46 @@
 # Every ignored advisory below reaches richdem-rs only through terrio, which depends
 # unconditionally on wbraster 0.2.1. wbraster's latest release requires zip 8.6.0 and ruzstd 0.8.3,
 # and no compatible release fixes them, so neither this workspace nor its lockfile can upgrade
-# them. terrio ignores the same IDs in its own .cargo/audit.toml for the same reasons. Remove these
-# when a terrio release drops wbraster or a wbraster release depends on zip >= 9 and
-# ruzstd >= 0.9.1.
+# them. terrio ignores the same IDs in its own .cargo/audit.toml. Remove these when a terrio
+# release drops wbraster or a wbraster release depends on zip >= 9.0.5 and ruzstd >= 0.9.1.
+#
+# richdem-rs never uses the zip crate. wbraster's only zip reader (sensor bundles) opens archives
+# with `ZipArchive::new` and reads entries itself; it never calls `ZipArchive::extract`,
+# `ZipStreamReader` or the decryption APIs, and enables only zip's `deflate` feature.
 #
 # The heapless 0.8.0 "unsound" warnings (via terrio -> geo 0.33 -> rstar 0.12) are warnings only
 # and are left visible; they clear when geo moves to rstar >= 0.13.
 
 [advisories]
 ignore = [
-    # zip 8.6.0: `ZipArchive::extract` and `ZipStreamReader::extract`, which neither richdem,
-    # terrio nor wbraster calls. richdem-rs never opens zip archives.
+    # zip 8.6.0: SUID/SGID bits kept by `ZipArchive::extract` and stream extraction (not called).
     "RUSTSEC-2026-0367",
+    # zip 8.6.0: `ZipArchive::extract` creates symlinks with out-of-tree targets (not called).
     "RUSTSEC-2026-0368",
+    # zip 8.6.0: `ZipStreamReader::extract` / `ZipArchive::extract` chmod through symlinks (not
+    # called).
     "RUSTSEC-2026-0369",
+    # zip 8.6.0: `ZipArchive::extract` aborts on a symlink entry with a huge declared size (not
+    # called).
     "RUSTSEC-2026-0429",
-    "RUSTSEC-2026-0546",
-    "RUSTSEC-2026-0548",
-    # zip 8.6.0: WinZip AES entries (`aes-crypto`) and the Shrink, Reduce and Implode decoders
-    # (`legacy-zip`). wbraster enables only `deflate`, so neither is compiled in.
+    # zip 8.6.0: WinZip AES entries skip HMAC checks; needs the `aes-crypto` feature, not compiled
+    # in.
     "RUSTSEC-2026-0545",
+    # zip 8.6.0: `ZipArchive::extract` / `extract_unwrapped_root_dir` write outside the destination
+    # through chained symlinks (not called).
+    "RUSTSEC-2026-0546",
+    # zip 8.6.0: Shrink/Reduce/Implode decoders preallocate the declared size; needs the
+    # `legacy-zip` feature, not compiled in.
     "RUSTSEC-2026-0547",
-    # ruzstd 0.8.3: wbraster's Zarr reader, which terrio reaches only with
-    # TERRIO_WBRASTER_FALLBACK=YES in builds without its `zarr` feature. richdem-rs reads GeoTIFF
-    # through terrio's own driver, which decodes Zstandard without ruzstd 0.8.
+    # zip 8.6.0: `ZipStreamReader` uses local-header names that can differ from the central
+    # directory (not called).
+    "RUSTSEC-2026-0548",
+    # ruzstd 0.8.3: a crafted .zst input can exhaust memory (denial of service, no memory
+    # corruption). This is an ACCEPTED RISK, not unreachable code: wbraster decodes Zstandard with
+    # it in its Zarr reader, which terrio uses only when a process sets
+    # TERRIO_WBRASTER_FALLBACK=YES (in builds without terrio's `zarr` feature). richdem-rs never
+    # sets it, and terrio's own GeoTIFF reader decodes Zstandard with ruzstd 0.9. A process that
+    # sets that variable and reads untrusted Zarr data is exposed until terrio or wbraster ships
+    # the fix described above.
     "RUSTSEC-2026-0344",
 ]
