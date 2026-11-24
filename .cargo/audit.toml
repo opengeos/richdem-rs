@@ -17,6 +17,7 @@
 
 [advisories]
 ignore = [
+    # The zip IDs below: remove them when terrio or wbraster depends on zip >= 9.0.5.
     # zip 8.6.0: SUID/SGID bits kept by `ZipArchive::extract` and stream extraction (not called).
     "RUSTSEC-2026-0367",
     # zip 8.6.0: `ZipArchive::extract` creates symlinks with out-of-tree targets (not called).
@@ -45,6 +46,8 @@ ignore = [
     # TERRIO_WBRASTER_FALLBACK=YES (in builds without terrio's `zarr` feature). richdem-rs never
     # sets it, and terrio's own GeoTIFF reader decodes Zstandard with ruzstd 0.9. A process that
     # sets that variable and reads untrusted Zarr data is exposed until terrio or wbraster ships
-    # the fix described above.
+    # a fix. Re-check this ignore before any richdem-rs code or docs set
+    # TERRIO_WBRASTER_FALLBACK (enabling terrio's `zarr` feature reduces exposure: terrio then reads
+    # Zarr itself). Remove it when terrio or wbraster depends on ruzstd >= 0.9.1.
     "RUSTSEC-2026-0344",
 ]
