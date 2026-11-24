@@ -2,7 +2,7 @@
 name = "richdem-js"
 description = "WebAssembly bindings for richdem-rs: pure-Rust DEM hydrologic and terrain analysis (Priority-Flood, Lindsay breaching, Flow Accumulation, Depression Hierarchies, Fill-Spill-Merge) in browsers and Node.js"
 publish = false
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 license = "GPL-3.0-only"
 rust-version = "1.90"
