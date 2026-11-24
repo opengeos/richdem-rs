@@ -108,8 +108,9 @@ jobs:
         with:
           tool: cargo-audit@0.22.2
       # Only js/Cargo.lock is tracked; resolve the root and python/ lockfiles fresh, as users of the
-      # published crates and wheels do. This is deliberately a tripwire: a new advisory against any
-      # dependency, or a resolution that changes which zip/ruzstd versions apply, fails this job.
+      # published crates and wheels do. This is deliberately a tripwire: a new advisory ID against any
+      # dependency fails this job. Ignores match advisory IDs, not crate versions, so a resolution
+      # that still hits an ignored ID passes silently.
       - name: Generate lockfiles
         run: |
           cargo generate-lockfile
