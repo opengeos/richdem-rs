@@ -968,7 +968,7 @@ dependencies = [
 
 [[package]]
 name = "richdem"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "getrandom 0.2.17",
  "getrandom 0.4.3",
@@ -980,7 +980,7 @@ dependencies = [
 
 [[package]]
 name = "richdem-js"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "console_error_panic_hook",
  "getrandom 0.2.17",
