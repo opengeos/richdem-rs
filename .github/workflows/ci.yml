@@ -93,3 +93,30 @@ jobs:
       - name: Build browser WASM bundle
         working-directory: js
         run: wasm-pack build --target web --release --out-dir pkg -- --locked
+
+  # RustSec advisories for all three lockfiles, with the ignores in .cargo/audit.toml (read from the
+  # repository root). Unsound/unmaintained advisories are warnings and do not fail the job.
+  audit:
+    name: RustSec advisories
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master; toolchain set by input
+        with:
+          toolchain: stable
+      - uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
+        with:
+          tool: cargo-audit@0.22.2
+      # Only js/Cargo.lock is tracked; resolve the root and python/ lockfiles fresh, as users of the
+      # published crates and wheels do. This is deliberately a tripwire: a new advisory ID against any
+      # dependency fails this job. Ignores match advisory IDs, not crate versions, so a resolution
+      # that still hits an ignored ID passes silently.
+      - name: Generate lockfiles
+        run: |
+          cargo generate-lockfile
+          cargo generate-lockfile --manifest-path python/Cargo.toml
+      - name: cargo audit
+        run: |
+          cargo audit
+          cargo audit --no-fetch -f python/Cargo.lock
+          cargo audit --no-fetch -f js/Cargo.lock

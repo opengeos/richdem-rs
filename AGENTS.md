@@ -29,6 +29,14 @@ cargo test -p richdem --no-default-features --lib
 cargo test --workspace --all-features
 ```
 
+Run `cargo audit` from the repository root so it reads `.cargo/audit.toml` (each ignore carries a justification, and each ignore group states a removal condition; CI's `audit` job runs the same checks); audit the separate `python/` and `js/` workspaces from the root too, with `cargo audit -f python/Cargo.lock` and `cargo audit -f js/Cargo.lock`. Only `js/Cargo.lock` is tracked in git, so generate the others on a fresh clone first:
+
+```sh
+cargo generate-lockfile
+cargo generate-lockfile --manifest-path python/Cargo.toml
+cargo audit && cargo audit -f python/Cargo.lock && cargo audit -f js/Cargo.lock
+```
+
 When touching `python/` or `scripts/`, also rebuild and test the Python bindings and verify sdist packaging if metadata/manifests changed:
 
 ```sh
